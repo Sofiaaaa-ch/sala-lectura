@@ -1,0 +1,4040 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sala de Lectura</title>
+<style>
+  :root{
+    --void:#0a0e14; --panel:#0f1621; --panel-2:#141d2b;
+    --border:#1e2b3a; --border-soft:#182332;
+    --text:#dbe4ee; --text-dim:#5b7086; --text-faint:#3a4a5c;
+    --cyan:#2dd4bf; --cyan-dim:#1a5c56; --red:#e0645c;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--void); color:var(--text);
+    font-family:'Courier New', Consolas, monospace; min-height:100vh;
+  }
+  header{border-bottom:1px solid var(--border); padding:20px 20px 14px; position:sticky; top:0; background:var(--void); z-index:20;}
+  .brand{display:flex; align-items:baseline; gap:10px;}
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--cyan);flex-shrink:0;}
+  h1{font-size:15px; letter-spacing:0.08em; text-transform:uppercase; margin:0; font-weight:700;}
+  .sub{font-size:11px; color:var(--text-dim); display:flex; align-items:center; gap:8px; flex-wrap:wrap;}
+  .sync-dot{width:6px;height:6px;border-radius:50%; background:var(--text-faint); display:inline-block;}
+  .sync-dot.live{background:var(--cyan); box-shadow:0 0 6px var(--cyan);}
+  .filter-row{display:flex; gap:8px; margin-top:14px; overflow-x:auto; padding-bottom:2px; align-items:center;}
+  .chip{border:1px solid var(--border); background:var(--panel); color:var(--text-dim); font-family:inherit; font-size:11px; padding:6px 12px; border-radius:3px; cursor:pointer; white-space:nowrap;}
+  .chip.active{background:var(--cyan-dim); border-color:var(--cyan); color:#c7fbf2;}
+  .add-btn{
+    border:1px solid var(--cyan); background:var(--cyan-dim); color:#c7fbf2;
+    font-family:inherit; font-size:11px; padding:6px 14px; border-radius:3px; cursor:pointer; white-space:nowrap;
+    flex-shrink:0;
+  }
+  .add-btn:hover{ background:var(--cyan); color:#04241f; }
+  .add-btn.dash{ margin-left:auto; }
+  .topic-add-btn{
+    border:1px dashed var(--border); background:none; color:var(--text-faint);
+    font-family:inherit; font-size:11px; padding:6px 12px; border-radius:3px; cursor:pointer; white-space:nowrap;
+    flex-shrink:0;
+  }
+  .topic-add-btn:hover{ border-color:var(--cyan); color:var(--cyan); }
+  main{max-width:1100px; margin:0 auto; padding:24px 16px 100px;}
+  .topic{margin-bottom:30px;}
+  .topic-head{display:flex; align-items:center; gap:10px; padding-bottom:8px; margin-bottom:12px; border-bottom:1px solid var(--border-soft);}
+  .tag{width:10px;height:10px;border-radius:2px;flex-shrink:0;}
+  .topic-head h2{font-size:13px; letter-spacing:0.08em; text-transform:uppercase; font-weight:700; margin:0;}
+  .count{font-size:11px; color:var(--text-faint);}
+  .grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:10px;}
+  .empty{border:1px dashed var(--border); border-radius:4px; padding:18px 12px; text-align:center; color:var(--text-faint); font-size:11px; grid-column:1/-1;}
+  .card{background:var(--panel); border:1px solid var(--border); border-left:3px solid var(--c,var(--cyan)); border-radius:3px; padding:12px; cursor:pointer; position:relative;}
+  .card .k{font-size:9px; letter-spacing:0.06em; color:var(--text-faint); text-transform:uppercase;}
+  .card h3{font-size:13px; margin:5px 0 6px; line-height:1.3; font-weight:500;}
+  .card .meta{font-size:10px; color:var(--text-dim); display:flex; justify-content:space-between;}
+  .card .del{
+    position:absolute; top:8px; right:8px; font-size:10px; color:var(--text-faint);
+    background:none; border:none; cursor:pointer; padding:2px 5px; border-radius:3px;
+  }
+  .card .del:hover{color:var(--red); background:rgba(224,100,92,0.1);}
+  .footer-note{max-width:1100px; margin:0 auto; padding:0 16px 40px; font-size:10.5px; color:var(--text-faint); line-height:1.6; border-top:1px solid var(--border-soft); padding-top:16px;}
+  .loading{max-width:1100px;margin:40px auto;text-align:center;color:var(--text-faint);font-size:12px;}
+
+  .viewer{position:fixed; inset:0; background:#000; z-index:200; display:flex; flex-direction:column;}
+  .vbar{display:flex; align-items:center; gap:10px; padding:10px 14px; background:#05080c; border-bottom:1px solid #1a2530; font-size:11px; color:var(--text-dim);}
+  .vbar b{color:var(--cyan);}
+  .vbar button{margin-left:auto; background:none; border:1px solid var(--border); color:var(--text-dim); font-family:inherit; font-size:11px; padding:5px 12px; border-radius:3px; cursor:pointer;}
+  .vwrap{flex:1; padding:8px;}
+  .vwrap iframe{width:100%; height:100%; border:1px solid #1a2530; background:#fff; border-radius:2px;}
+  .hidden{display:none !important;}
+
+  /* ---- Modal para agregar dashboard ---- */
+  .modal-backdrop{
+    position:fixed; inset:0; background:rgba(0,0,0,0.7); z-index:300;
+    display:flex; align-items:center; justify-content:center; padding:20px;
+  }
+  .modal{
+    background:var(--panel-2); border:1px solid var(--border); border-radius:6px;
+    width:100%; max-width:640px; max-height:90vh; overflow-y:auto; padding:20px;
+  }
+  .modal h3{font-size:14px; margin-bottom:14px; color:var(--cyan); text-transform:uppercase; letter-spacing:0.05em;}
+  .field{margin-bottom:12px;}
+  .field label{display:block; font-size:10.5px; color:var(--text-dim); margin-bottom:5px; text-transform:uppercase; letter-spacing:0.05em;}
+  .field input, .field select, .field textarea{
+    width:100%; background:var(--panel); border:1px solid var(--border); color:var(--text);
+    font-family:inherit; font-size:12px; padding:8px 10px; border-radius:3px;
+  }
+  .field textarea{min-height:160px; resize:vertical; font-size:10.5px;}
+  .modal-actions{display:flex; gap:8px; justify-content:flex-end; margin-top:16px;}
+  .btn{font-family:inherit; font-size:11px; padding:7px 16px; border-radius:3px; cursor:pointer; border:1px solid var(--border); background:var(--panel); color:var(--text-dim);}
+  .btn.primary{background:var(--cyan-dim); border-color:var(--cyan); color:#c7fbf2;}
+  .btn.primary:hover{background:var(--cyan); color:#04241f;}
+  .btn.primary:disabled{opacity:0.5; cursor:not-allowed;}
+  .modal-error{color:var(--red); font-size:11px; margin-top:8px;}
+  .modal-hint{font-size:10.5px; color:var(--text-faint); margin-top:4px; line-height:1.5;}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand"><span class="dot"></span><h1>Sala de Lectura</h1></div>
+  <div class="sub"><span class="sync-dot" id="syncDot"></span><span id="stat">Cargando…</span></div>
+  <div class="filter-row" id="filters"></div>
+</header>
+<main id="main"><div class="loading">Cargando dashboards…</div></main>
+<div class="footer-note">
+  Ultima actualizacion: <span id="updated-date">—</span>. Los dashboards se publican desde almacenamiento compartido en Vercel: cualquiera con este link ve las actualizaciones sin necesidad de un link nuevo.
+</div>
+
+<div class="viewer hidden" id="viewer">
+  <div class="vbar"><b>ESTUDIO —</b><span id="v-title"></span><button id="close-v">✕ Cerrar</button></div>
+  <div class="vwrap"><iframe id="v-frame" sandbox="allow-scripts allow-same-origin"></iframe></div>
+</div>
+
+<div class="modal-backdrop hidden" id="modalBackdrop">
+  <div class="modal">
+    <h3>+ Agregar dashboard</h3>
+    <div class="field">
+      <label>Titulo</label>
+      <input type="text" id="f-title" placeholder="Ej. Fracturas de Weber">
+    </div>
+    <div class="field">
+      <label>Tema</label>
+      <select id="f-topic"></select>
+    </div>
+    <div class="field">
+      <label>HTML completo del dashboard</label>
+      <textarea id="f-html" placeholder="Pega aqui el HTML completo (&lt;!DOCTYPE html&gt;...&lt;/html&gt;)"></textarea>
+      <div class="modal-hint">Pega el documento HTML completo tal cual lo genera Claude. No es necesario editarlo.</div>
+    </div>
+    <div class="modal-error hidden" id="modalError"></div>
+    <div class="modal-actions">
+      <button class="btn" id="cancelAdd">Cancelar</button>
+      <button class="btn primary" id="confirmAdd">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop hidden" id="topicModalBackdrop">
+  <div class="modal" style="max-width:420px;">
+    <h3>+ Nueva categoria</h3>
+    <div class="field">
+      <label>Nombre</label>
+      <input type="text" id="t-name" placeholder="Ej. Rx de Torax pediatrico">
+    </div>
+    <div class="field">
+      <label>Color</label>
+      <input type="color" id="t-color" value="#4fd8d0" style="height:38px; padding:4px; cursor:pointer;">
+    </div>
+    <div class="modal-error hidden" id="topicModalError"></div>
+    <div class="modal-actions">
+      <button class="btn" id="cancelAddTopic">Cancelar</button>
+      <button class="btn primary" id="confirmAddTopic">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+try {
+
+// ------------------------------------------------------------------
+// TEMAS: semilla usada SOLO la primera vez que alguien abre el
+// sitio. Los temas iniciales quedan embebidos y, una vez desplegado,
+// el estado compartido vive en Vercel Blob.
+// ------------------------------------------------------------------
+var DEFAULT_TOPICS = [
+  {id:'fluoro', name:'Fluoroscopia', color:'#9d8cf0'},
+  {id:'torax', name:'Rx de Torax', color:'#2dd4bf'},
+  {id:'msk', name:'Rx Musculoesqueletico', color:'#f0a868'}
+];
+
+// ------------------------------------------------------------------
+// SEMILLA: contenido inicial para el primer despliegue. Cuando existe
+// estado compartido en Vercel Blob, ese estado pasa a ser la fuente
+// de verdad para todos los visitantes.
+// ------------------------------------------------------------------
+var DEFAULT_DASHBOARDS = [
+  {title:"Lineas y Rayas Mediastinicas", topic:"torax", date:"2026-07-06", html: `<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Líneas y Rayas Mediastínicas — Dashboard Radiológico</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:        #080B12;
+    --panel:     #101624;
+    --card:      #141B2D;
+    --border:    #1F2D4A;
+    --cyan:      #00C9C8;
+    --cyan-dim:  rgba(0,201,200,0.12);
+    --cyan-glow: rgba(0,201,200,0.25);
+    --red:       #FF4D6D;
+    --red-dim:   rgba(255,77,109,0.12);
+    --amber:     #FFB830;
+    --amber-dim: rgba(255,184,48,0.10);
+    --green:     #36D399;
+    --green-dim: rgba(54,211,153,0.10);
+    --text:      #C8D6F0;
+    --text-muted:#5A7099;
+    --text-dim:  #8A9EC0;
+    --white:     #E8EDF5;
+  }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', sans-serif;
+    font-size: 13px;
+    line-height: 1.6;
+    min-height: 100vh;
+  }
+
+  /* ── HEADER ───────────────────────────────── */
+  header {
+    position: sticky; top: 0; z-index: 100;
+    background: rgba(8,11,18,0.92);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+    padding: 0 2rem;
+    display: flex; align-items: center; justify-content: space-between;
+    height: 56px;
+  }
+  .header-logo {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px; font-weight: 700;
+    letter-spacing: 0.12em;
+    color: var(--cyan);
+    text-transform: uppercase;
+  }
+  .header-logo span { color: var(--text-muted); font-weight: 300; }
+  .header-meta {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px; color: var(--text-muted);
+    letter-spacing: 0.08em;
+  }
+  .header-pill {
+    background: var(--cyan-dim);
+    border: 1px solid var(--cyan);
+    color: var(--cyan);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px; font-weight: 700;
+    letter-spacing: 0.15em;
+    padding: 3px 10px; border-radius: 20px;
+    text-transform: uppercase;
+  }
+
+  /* ── HERO ─────────────────────────────────── */
+  .hero {
+    padding: 3rem 2rem 2rem;
+    border-bottom: 1px solid var(--border);
+    display: grid; grid-template-columns: 1fr auto;
+    gap: 2rem; align-items: center;
+  }
+  .hero-title {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: clamp(22px, 3vw, 36px);
+    font-weight: 700;
+    color: var(--white);
+    line-height: 1.15;
+    letter-spacing: -0.02em;
+  }
+  .hero-title em {
+    font-style: normal;
+    color: var(--cyan);
+  }
+  .hero-sub {
+    margin-top: 0.75rem;
+    color: var(--text-dim);
+    font-size: 12px;
+    max-width: 560px;
+  }
+  .hero-ref {
+    margin-top: 0.5rem;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px; color: var(--text-muted);
+  }
+
+  /* legend chips */
+  .legend {
+    display: flex; flex-wrap: wrap; gap: 0.5rem;
+    margin-top: 1.5rem;
+  }
+  .legend-chip {
+    display: flex; align-items: center; gap: 6px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px; font-weight: 600;
+    letter-spacing: 0.1em; text-transform: uppercase;
+    padding: 5px 12px; border-radius: 4px;
+    border: 1px solid;
+  }
+  .chip-line   { color: var(--cyan);  border-color: var(--cyan);  background: var(--cyan-dim); }
+  .chip-stripe { color: var(--amber); border-color: var(--amber); background: var(--amber-dim); }
+  .chip-iface  { color: var(--green); border-color: var(--green); background: var(--green-dim); }
+  .chip-dot { width:7px; height:7px; border-radius: 50%; }
+
+  /* overview SVG panel */
+  .hero-svg-wrap {
+    width: 220px; flex-shrink: 0;
+  }
+
+  /* ── DEFINITIONS ROW ─────────────────────── */
+  .defs-row {
+    display: grid; grid-template-columns: repeat(3, 1fr);
+    gap: 1px;
+    background: var(--border);
+    border-bottom: 1px solid var(--border);
+  }
+  .def-cell {
+    background: var(--panel);
+    padding: 1.25rem 1.5rem;
+  }
+  .def-tag {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px; font-weight: 700;
+    letter-spacing: 0.18em; text-transform: uppercase;
+    margin-bottom: 0.4rem;
+  }
+  .def-tag.cyan  { color: var(--cyan); }
+  .def-tag.amber { color: var(--amber); }
+  .def-tag.green { color: var(--green); }
+  .def-title {
+    font-size: 15px; font-weight: 600;
+    color: var(--white); margin-bottom: 0.3rem;
+  }
+  .def-desc { font-size: 11.5px; color: var(--text-dim); line-height: 1.55; }
+  .def-measure {
+    margin-top: 0.5rem;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px; font-weight: 600;
+    color: var(--amber);
+  }
+
+  /* ── MAIN GRID ───────────────────────────── */
+  .main-content { padding: 1.5rem 2rem 3rem; }
+
+  .section-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px; font-weight: 700;
+    letter-spacing: 0.2em; text-transform: uppercase;
+    color: var(--text-muted);
+    margin: 2rem 0 1rem;
+    display: flex; align-items: center; gap: 0.75rem;
+  }
+  .section-label::after {
+    content: '';
+    flex: 1; height: 1px;
+    background: var(--border);
+  }
+
+  .cards-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 1rem;
+  }
+  .cards-grid.wide {
+    grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
+  }
+
+  /* ── CARD ────────────────────────────────── */
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    display: flex; flex-direction: column;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+  .card:hover {
+    border-color: var(--cyan);
+    box-shadow: 0 0 0 1px var(--cyan-glow), 0 8px 32px rgba(0,0,0,0.4);
+  }
+  .card-header {
+    padding: 1rem 1.25rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: flex-start; gap: 0.75rem;
+  }
+  .card-type-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%; flex-shrink: 0;
+    margin-top: 5px;
+  }
+  .dot-line   { background: var(--cyan); box-shadow: 0 0 6px var(--cyan); }
+  .dot-stripe { background: var(--amber); box-shadow: 0 0 6px var(--amber); }
+  .dot-iface  { background: var(--green); box-shadow: 0 0 6px var(--green); }
+
+  .card-title-wrap { flex: 1; }
+  .card-eyebrow {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px; font-weight: 700;
+    letter-spacing: 0.15em; text-transform: uppercase;
+    margin-bottom: 2px;
+  }
+  .ey-line   { color: var(--cyan); }
+  .ey-stripe { color: var(--amber); }
+  .ey-iface  { color: var(--green); }
+
+  .card-title {
+    font-size: 14px; font-weight: 600;
+    color: var(--white); line-height: 1.2;
+  }
+
+  .card-freq {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 18px; font-weight: 700;
+    color: var(--text-muted);
+    flex-shrink: 0; align-self: center;
+  }
+
+  .card-diagram {
+    background: #0C1020;
+    display: flex; justify-content: center; align-items: center;
+    padding: 1rem;
+    min-height: 140px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .card-body { padding: 1rem 1.25rem; flex: 1; }
+
+  .info-row {
+    display: flex; align-items: baseline; gap: 0.5rem;
+    margin-bottom: 0.45rem;
+  }
+  .info-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px; font-weight: 700;
+    letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--text-muted); flex-shrink: 0; width: 80px;
+  }
+  .info-value { font-size: 12px; color: var(--text-dim); line-height: 1.4; }
+
+  .card-divider {
+    height: 1px; background: var(--border);
+    margin: 0.75rem 0;
+  }
+
+  .patho-title {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px; font-weight: 700;
+    letter-spacing: 0.15em; text-transform: uppercase;
+    color: var(--red); margin-bottom: 0.5rem;
+    display: flex; align-items: center; gap: 5px;
+  }
+  .patho-title::before {
+    content: '▲';
+    font-size: 8px;
+  }
+
+  .tags-wrap { display: flex; flex-wrap: wrap; gap: 4px; }
+  .tag {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9.5px;
+    padding: 2px 8px; border-radius: 3px;
+    border: 1px solid;
+  }
+  .tag-red   { color: var(--red);   border-color: rgba(255,77,109,0.35);  background: var(--red-dim); }
+  .tag-cyan  { color: var(--cyan);  border-color: rgba(0,201,200,0.3);    background: var(--cyan-dim); }
+  .tag-amber { color: var(--amber); border-color: rgba(255,184,48,0.3);   background: var(--amber-dim); }
+
+  /* ── MEASUREMENT TABLE ───────────────────── */
+  .meas-table {
+    width: 100%; border-collapse: collapse;
+    margin-top: 1.5rem;
+  }
+  .meas-table th {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px; font-weight: 700;
+    letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--text-muted);
+    text-align: left; padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+  }
+  .meas-table td {
+    font-size: 12px; color: var(--text-dim);
+    padding: 0.55rem 0.75rem;
+    border-bottom: 1px solid rgba(31,45,74,0.5);
+    vertical-align: top;
+  }
+  .meas-table tr:last-child td { border-bottom: none; }
+  .meas-table tr:hover td { background: rgba(255,255,255,0.02); }
+  .meas-val {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px; font-weight: 600;
+    color: var(--amber);
+  }
+  .meas-name { color: var(--white); font-weight: 500; }
+
+  /* ── FOOTER ──────────────────────────────── */
+  footer {
+    border-top: 1px solid var(--border);
+    padding: 1.25rem 2rem;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px; color: var(--text-muted);
+    display: flex; justify-content: space-between; align-items: center;
+  }
+
+  /* ── SVG styles ──────────────────────────── */
+  .svg-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px; fill: #5A7099;
+  }
+  .svg-label-cyan  { fill: #00C9C8; font-size: 9.5px; font-weight: bold; }
+  .svg-label-amber { fill: #FFB830; font-size: 9.5px; font-weight: bold; }
+  .svg-label-green { fill: #36D399; font-size: 9.5px; font-weight: bold; }
+  .svg-label-red   { fill: #FF4D6D; font-size: 9px; }
+
+  @media (max-width: 700px) {
+    .hero { grid-template-columns: 1fr; }
+    .hero-svg-wrap { display: none; }
+    .defs-row { grid-template-columns: 1fr; }
+    .cards-grid, .cards-grid.wide { grid-template-columns: 1fr; }
+    header { padding: 0 1rem; }
+    .main-content { padding: 1rem 1rem 2rem; }
+    .hero { padding: 1.5rem 1rem 1rem; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ══════════════ HEADER ══════════════ -->
+<header>
+  <div class="header-logo">Rad<span>·</span>Dashboard <span>/ Tórax PA</span></div>
+  <div style="display:flex; gap:1rem; align-items:center;">
+    <div class="header-meta">Gibbs et al. — RadioGraphics 2007;27:33–48</div>
+    <div class="header-pill">CME</div>
+  </div>
+</header>
+
+<!-- ══════════════ HERO ══════════════ -->
+<section class="hero">
+  <div>
+    <div class="hero-title">Líneas y Rayas<br><em>Mediastínicas</em></div>
+    <p class="hero-sub">Marco anatómico y semiológico para interpretar las reflexiones pleurales, rayas e interfaces del mediastino en la radiografía de tórax convencional y su correlación con TC.</p>
+    <p class="hero-ref">Fuente → Gibbs JM et al. RadioGraphics 2007 · Residencia de Radiología</p>
+    <div class="legend">
+      <div class="legend-chip chip-line"><span class="chip-dot" style="background:#00C9C8"></span>Línea &lt;1 mm</div>
+      <div class="legend-chip chip-stripe"><span class="chip-dot" style="background:#FFB830"></span>Stripe (raya)</div>
+      <div class="legend-chip chip-iface"><span class="chip-dot" style="background:#36D399"></span>Interface</div>
+    </div>
+  </div>
+
+  <!-- Overview SVG -->
+  <div class="hero-svg-wrap">
+    <svg viewBox="0 0 220 300" width="220" height="300" xmlns="http://www.w3.org/2000/svg">
+      <!-- background -->
+      <rect width="220" height="300" fill="#0C1020" rx="6"/>
+      <!-- trachea -->
+      <rect x="98" y="10" width="24" height="60" fill="none" stroke="#2A3A5A" stroke-width="1.5"/>
+      <!-- lung L -->
+      <path d="M30,30 Q20,80 22,160 Q24,220 60,240 Q80,250 95,230 L95,90 Q80,60 60,30 Z" fill="none" stroke="#1F2D4A" stroke-width="1.5"/>
+      <!-- lung R -->
+      <path d="M190,30 Q200,80 198,160 Q196,220 160,240 Q140,250 125,230 L125,90 Q140,60 160,30 Z" fill="none" stroke="#1F2D4A" stroke-width="1.5"/>
+      <!-- heart -->
+      <ellipse cx="110" cy="210" rx="45" ry="52" fill="#0D1525" stroke="#1F2D4A" stroke-width="1.5"/>
+      <!-- aortic arch -->
+      <path d="M95,95 Q85,70 100,55 Q120,40 130,60 L130,95" fill="none" stroke="#2A3A5A" stroke-width="2"/>
+      <!-- pulmonary artery -->
+      <path d="M105,110 Q90,105 78,115" fill="none" stroke="#2A3A5A" stroke-width="1.5"/>
+
+      <!-- === LINES === -->
+      <!-- Anterior junction line -->
+      <line x1="115" y1="28" x2="100" y2="80" stroke="#00C9C8" stroke-width="1.8" stroke-dasharray="none"/>
+      <text x="68" y="52" class="svg-label-cyan" transform="rotate(-60,68,52)">L. Ant. Unión</text>
+
+      <!-- Posterior junction line -->
+      <line x1="108" y1="18" x2="108" y2="85" stroke="#00BCD4" stroke-width="1.8" stroke-dasharray="3,2"/>
+      <text x="112" y="24" class="svg-label" fill="#4DD0E1" font-size="8">L. Post.</text>
+
+      <!-- Right paratracheal stripe -->
+      <rect x="122" y="18" width="8" height="52" fill="rgba(255,184,48,0.15)" stroke="#FFB830" stroke-width="1.2"/>
+      <text x="132" y="30" class="svg-label-amber" font-size="8">R.PT</text>
+
+      <!-- Left paratracheal stripe -->
+      <rect x="90" y="18" width="8" height="42" fill="rgba(255,184,48,0.1)" stroke="#FFB830" stroke-width="1" stroke-dasharray="2,2"/>
+
+      <!-- AP Stripe -->
+      <path d="M78,85 Q72,100 78,115" fill="none" stroke="#36D399" stroke-width="2"/>
+      <text x="56" y="103" class="svg-label-green" font-size="8">AP Stripe</text>
+
+      <!-- AP Window -->
+      <path d="M78,85 Q85,92 85,115" fill="rgba(54,211,153,0.08)" stroke="#36D399" stroke-width="1" stroke-dasharray="3,2"/>
+
+      <!-- Azygoesophageal recess -->
+      <path d="M125,95 Q128,140 126,215" fill="none" stroke="#36D399" stroke-width="1.5"/>
+      <text x="130" y="155" class="svg-label" fill="#36D399" font-size="8">Rec. Azigo.</text>
+
+      <!-- Left paraspinal -->
+      <path d="M40,95 Q36,150 38,230" fill="none" stroke="#36D399" stroke-width="1.5"/>
+      <text x="14" y="160" class="svg-label" fill="#36D399" font-size="8" writing-mode="tb">L.Paraesp.I</text>
+
+      <!-- Right paraspinal -->
+      <path d="M180,130 Q183,175 181,230" fill="none" stroke="#36D399" stroke-width="1.5"/>
+      <text x="185" y="185" class="svg-label" fill="#36D399" font-size="8" writing-mode="tb">L.PE.D</text>
+
+      <!-- Posterior tracheal stripe -->
+      <rect x="120" y="12" width="4" height="55" fill="rgba(255,184,48,0.1)" stroke="#FFB830" stroke-width="1" stroke-dasharray="2,1"/>
+
+      <!-- axis label -->
+      <text x="110" y="292" text-anchor="middle" class="svg-label" font-size="8.5" fill="#2A3A5A">Vista AP esquemática</text>
+    </svg>
+  </div>
+</section>
+
+<!-- ══════════════ DEFINITIONS ══════════════ -->
+<div class="defs-row">
+  <div class="def-cell">
+    <div class="def-tag cyan">LÍNEA</div>
+    <div class="def-title">Line</div>
+    <div class="def-desc">Aire pulmonar delimita tejido interpuesto muy delgado en <em>ambos lados</em>. Formada por aposición de pleuras visceral y parietal.</div>
+    <div class="def-measure">&lt; 1 mm de ancho</div>
+  </div>
+  <div class="def-cell">
+    <div class="def-tag amber">STRIPE</div>
+    <div class="def-title">Raya (Stripe)</div>
+    <div class="def-desc">Aire delimita tejido blando más voluminoso. El grosor varía según la estructura anatómica involucrada.</div>
+    <div class="def-measure">1 – 5.5 mm (varía)</div>
+  </div>
+  <div class="def-cell">
+    <div class="def-tag green">INTERFACE</div>
+    <div class="def-title">Interface</div>
+    <div class="def-desc">Contacto entre estructuras de <em>diferente densidad</em>. La "línea blanca" a veces es un fenómeno de Mach, no tejido real.</div>
+    <div class="def-measure">Fenómeno de Mach ⚡</div>
+  </div>
+</div>
+
+<!-- ══════════════ MAIN CONTENT ══════════════ -->
+<div class="main-content">
+
+  <!-- SECTION: LÍNEAS DE UNIÓN -->
+  <div class="section-label">01 — Líneas de Unión (Junction Lines)</div>
+  <div class="cards-grid">
+
+    <!-- CARD: Anterior Junction Line -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-type-dot dot-line"></div>
+        <div class="card-title-wrap">
+          <div class="card-eyebrow ey-line">Línea · Proyección PA</div>
+          <div class="card-title">Línea de Unión Anterior</div>
+        </div>
+        <div class="card-freq">24–57%</div>
+      </div>
+      <div class="card-diagram">
+        <svg viewBox="0 0 200 130" width="200" height="130" xmlns="http://www.w3.org/2000/svg">
+          <rect width="200" height="130" fill="#0C1020"/>
+          <!-- sternum outline -->
+          <rect x="88" y="5" width="24" height="110" fill="none" stroke="#1A2540" stroke-width="1"/>
+          <!-- lungs outline -->
+          <path d="M30,15 Q15,50 18,100 Q20,115 55,120 Q80,125 88,105 L88,30 Q70,15 50,12 Z" fill="none" stroke="#1F2D4A" stroke-width="1.2"/>
+          <path d="M170,15 Q185,50 182,100 Q180,115 145,120 Q120,125 112,105 L112,30 Q130,15 150,12 Z" fill="none" stroke="#1F2D4A" stroke-width="1.2"/>
+          <!-- mediastinal fat region -->
+          <rect x="88" y="25" width="24" height="70" fill="rgba(255,184,48,0.05)"/>
+          <!-- THE LINE -->
+          <line x1="105" y1="18" x2="92" y2="88" stroke="#00C9C8" stroke-width="2.5"/>
+          <!-- direction arrow -->
+          <text x="108" y="20" class="svg-label-cyan" font-size="10">↘</text>
+          <!-- labels -->
+          <text x="50" y="65" class="svg-label">Pulmón</text>
+          <text x="50" y="75" class="svg-label">Izq.</text>
+          <text x="138" y="65" class="svg-label">Pulmón</text>
+          <text x="138" y="75" class="svg-label">Der.</text>
+          <text x="115" y="50" class="svg-label" fill="#FFB830">Grasa</text>
+          <text x="115" y="60" class="svg-label" fill="#FFB830">medias.</text>
+          <text x="60" y="120" class="svg-label-cyan">L. Unión Anterior</text>
+          <!-- V-shaped recesses -->
+          <path d="M88,30 L100,18 L112,30" fill="none" stroke="#2A3A5A" stroke-width="1" stroke-dasharray="2,2"/>
+          <path d="M88,75 L100,90 L112,75" fill="none" stroke="#2A3A5A" stroke-width="1" stroke-dasharray="2,2"/>
+          <text x="62" y="26" class="svg-label">Receso sup. V</text>
+          <text x="62" y="95" class="svg-label">Receso inf. V inv.</text>
+        </svg>
+      </div>
+      <div class="card-body">
+        <div class="info-row">
+          <div class="info-label">Formación</div>
+          <div class="info-value">Aposición pleural anteromedial bilateral + grasa mediastínica interpuesta</div>
+        </div>
+        <div class="info-row">
+          <div class="info-label">Trayecto</div>
+          <div class="info-value">Oblicua: arriba-derecha → abajo-izquierda. 2/3 superiores del esternón</div>
+        </div>
+        <div class="info-row">
+          <div class="info-label">Límites</div>
+          <div class="info-value">No supera las clavículas (a diferencia de la posterior)</div>
+        </div>
+        <div class="card-divider"></div>
+        <div class="patho-title">Alteración → mediastino anterior</div>
+        <div class="tags-wrap">
+          <span class="tag tag-red">Masa tímica</span>
+          <span class="tag tag-red">Bocio tiroideo</span>
+          <span class="tag tag-red">Linfadenopatía</span>
+          <span class="tag tag-red">Lipomatosis</span>
+          <span class="tag tag-amber">Atelectasia</span>
+          <span class="tag tag-amber">Hiperinsuflación</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- CARD: Posterior Junction Line -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-type-dot dot-line"></div>
+        <div class="card-title-wrap">
+          <div class="card-eyebrow ey-line">Línea · Proyección PA</div>
+          <div class="card-title">Línea de Unión Posterior</div>
+        </div>
+        <div class="card-freq">32%</div>
+      </div>
+      <div class="card-diagram">
+        <svg viewBox="0 0 200 130" width="200" height="130" xmlns="http://www.w3.org/2000/svg">
+          <rect width="200" height="130" fill="#0C1020"/>
+          <!-- vertebra outline T3-T5 -->
+          <rect x="88" y="28" width="24" height="70" rx="2" fill="none" stroke="#2A3A5A" stroke-width="1.5"/>
+          <text x="92" y="60" class="svg-label" fill="#2A3A5A" font-size="11">T3</text>
+          <text x="92" y="74" class="svg-label" fill="#2A3A5A" font-size="11">T4</text>
+          <text x="92" y="88" class="svg-label" fill="#2A3A5A" font-size="11">T5</text>
+          <!-- esophagus -->
+          <ellipse cx="100" cy="68" rx="5" ry="28" fill="rgba(255,184,48,0.08)" stroke="#FFB830" stroke-width="1" stroke-dasharray="2,1"/>
+          <text x="106" y="70" class="svg-label" fill="#FFB830" font-size="8">Esóf.</text>
+          <!-- trachea -->
+          <rect x="95" y="5" width="10" height="35" fill="none" stroke="#1F2D4A" stroke-width="1"/>
+          <!-- lungs -->
+          <path d="M30,15 Q15,60 20,110 L88,110 L88,28 Q70,15 50,12 Z" fill="none" stroke="#1F2D4A" stroke-width="1"/>
+          <path d="M170,15 Q185,60 180,110 L112,110 L112,28 Q130,15 150,12 Z" fill="none" stroke="#1F2D4A" stroke-width="1"/>
+          <!-- THE LINE — goes ABOVE clavicles -->
+          <line x1="100" y1="2" x2="103" y2="108" stroke="#00C9C8" stroke-width="2.5"/>
+          <!-- clavicle level indicator -->
+          <line x1="20" y1="25" x2="180" y2="25" stroke="#1F2D4A" stroke-width="1" stroke-dasharray="3,3"/>
+          <text x="152" y="22" class="svg-label" fill="#5A7099" font-size="8">Clavículas</text>
+          <!-- label -->
+          <text x="38" y="122" class="svg-label-cyan" font-size="9">L. Unión Posterior (supraclavicular ✓)</text>
+        </svg>
+      </div>
+      <div class="card-body">
+        <div class="info-row">
+          <div class="info-label">Formación</div>
+          <div class="info-value">Aposición pleural posteromedial bilateral, <em>posterior al esófago</em>, anterior a T3–T5</div>
+        </div>
+        <div class="info-row">
+          <div class="info-label">Trayecto</div>
+          <div class="info-value">Vertical, levemente cóncava a izquierda. Proyecta <strong>a través de la tráquea</strong></div>
+        </div>
+        <div class="info-row">
+          <div class="info-label">Clave</div>
+          <div class="info-value">Única línea que se extiende <em>por encima de las clavículas</em></div>
+        </div>
+        <div class="card-divider"></div>
+        <div class="patho-title">Alteración → mediastino posterior</div>
+        <div class="tags-wrap">
+          <span class="tag tag-red">Masa esofágica</span>
+          <span class="tag tag-red">Linfadenopatía</span>
+          <span class="tag tag-red">Patología aórtica</span>
+          <span class="tag tag-red">Tumor neurogénico</span>
+          <span class="tag tag-amber">Atelectasia</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- SECTION: PARATRACHEAL STRIPES -->
+  <div class="section-label">02 — Rayas Paratraqueales</div>
+  <div class="cards-grid">
+
+    <!-- CARD: Right Paratracheal Stripe -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-type-dot dot-stripe"></div>
+        <div class="card-title-wrap">
+          <div class="card-eyebrow ey-stripe">Stripe · Proyección PA</div>
+          <div class="card-title">Raya Paratraqueal Derecha</div>
+        </div>
+        <div class="card-freq" style="color:var(--cyan)">97%</div>
+      </div>
+      <div class="card-diagram">
+        <svg viewBox="0 0 200 130" width="200" height="130" xmlns="http://www.w3.org/2000/svg">
+          <rect width="200" height="130" fill="#0C1020"/>
+          <!-- trachea body -->
+          <rect x="88" y="5" width="24" height="90" fill="rgba(0,201,200,0.05)" stroke="#2A3A5A" stroke-width="1.5"/>
+          <text x="93" y="50" class="svg-label" fill="#2A3A5A">TRÁQUEA</text>
+          <!-- azygos arch -->
+          <path d="M112,88 Q130,88 135,78 Q140,68 130,65" fill="none" stroke="#2A3A5A" stroke-width="1.5"/>
+          <text x="138" y="75" class="svg-label" fill="#5A7099">V. Ácigos</text>
+          <!-- right upper lobe -->
+          <path d="M175,8 Q188,40 185,95 Q180,95 155,95 Q130,90 112,90 L112,8 Q145,5 175,8 Z" fill="rgba(0,201,200,0.04)" stroke="#1F2D4A" stroke-width="1"/>
+          <!-- THE STRIPE -->
+          <rect x="112" y="8" width="9" height="80" fill="rgba(255,184,48,0.18)" stroke="#FFB830" stroke-width="1.5"/>
+          <!-- measurement arrow -->
+          <line x1="121" y1="45" x2="132" y2="45" stroke="#FFB830" stroke-width="1"/>
+          <text x="134" y="48" class="svg-label-amber" font-size="10">≤ 4 mm</text>
+          <!-- labels -->
+          <text x="20" y="60" class="svg-label">Clavículas</text>
+          <line x1="15" y1="18" x2="87" y2="18" stroke="#1F2D4A" stroke-width="1" stroke-dasharray="2,2"/>
+          <text x="14" y="98" class="svg-label-amber" font-size="9">Raya PT Derecha</text>
+          <!-- extent arrows -->
+          <line x1="108" y1="8" x2="108" y2="88" stroke="#2A3A5A" stroke-width="1" marker-start="url(#arr)" marker-end="url(#arr)"/>
+          <text x="60" y="50" class="svg-label">Clavícula</text>
+          <text x="60" y="62" class="svg-label">→ Ácigos</text>
+        </svg>
+      </div>
+      <div class="card-body">
+        <div class="info-row">
+          <div class="info-label">Formación</div>
+          <div class="info-value">Pleura LSD + pared lateral traqueal derecha + grasa mediastínica; aire traqueal y pulmonar delimitan</div>
+        </div>
+        <div class="info-row">
+          <div class="info-label">Extensión</div>
+          <div class="info-value">Clavículas → ángulo traqueobronquial derecho (arco ácigos)</div>
+        </div>
+        <div class="info-row">
+          <div class="info-label">Grosor</div>
+          <div class="info-value"><span style="color:var(--amber);font-family:'JetBrains Mono',monospace;font-weight:600">≤ 4 mm</span> — la más frecuente de todas</div>
+        </div>
+        <div class="card-divider"></div>
+        <div class="patho-title">Causas de engrosamiento / alteración</div>
+        <div class="tags-wrap">
+          <span class="tag tag-red">Linfadenopatía paratraqueal</span>
+          <span class="tag tag-red">Neoplasia tiroidea / paratiroidea</span>
+          <span class="tag tag-red">Carcinoma traqueal / estenosis</span>
+          <span class="tag tag-amber">Derrame pleural ← más común</span>
+          <span class="tag tag-amber">Engrosamiento pleural</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- CARD: Left Paratracheal Stripe -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-type-dot dot-stripe"></div>
+        <div class="card-title-wrap">
+          <div class="card-eyebrow ey-stripe">Stripe · Proyección PA</div>
+          <div class="card-title">Raya Paratraqueal Izquierda</div>
+        </div>
+        <div class="card-freq">21–31%</div>
+      </div>
+      <div class="card-diagram">
+        <svg viewBox="0 0 200 130" width="200" height="130" xmlns="http://www.w3.org/2000/svg">
+          <rect width="200" height="130" fill="#0C1020"/>
+          <!-- trachea -->
+          <rect x="88" y="5" width="24" height="80" fill="rgba(0,201,200,0.04)" stroke="#2A3A5A" stroke-width="1.5"/>
+          <!-- left subclavian artery -->
+          <path d="M88,18 Q75,14 60,18" fill="none" stroke="#2A3A5A" stroke-width="1.5"/>
+          <text x="30" y="14" class="svg-label" fill="#5A7099">A. Subclavia I.</text>
+          <!-- left carotid -->
+          <path d="M88,30 Q75,28 65,35" fill="none" stroke="#2A3A5A" stroke-width="1.2"/>
+          <text x="30" y="35" class="svg-label" fill="#5A7099">A. Carótida I.</text>
+          <!-- aortic arch -->
+          <path d="M88,80 Q75,75 68,65 Q62,55 68,45 Q78,35 88,38" fill="none" stroke="#2A3A5A" stroke-width="2"/>
+          <text x="20" y="65" class="svg-label" fill="#5A7099">Arco</text>
+          <text x="20" y="75" class="svg-label" fill="#5A7099">Aórtico</text>
+          <!-- left upper lobe -->
+          <path d="M25,8 Q12,40 15,95 L88,95 L88,8 Q55,5 25,8 Z" fill="rgba(255,184,48,0.04)" stroke="#1F2D4A" stroke-width="1"/>
+          <!-- THE STRIPE (partial — often obscured) -->
+          <rect x="79" y="38" width="9" height="42" fill="rgba(255,184,48,0.18)" stroke="#FFB830" stroke-width="1.5"/>
+          <!-- obscured zone indicator -->
+          <rect x="79" y="8" width="9" height="30" fill="rgba(255,77,109,0.1)" stroke="#FF4D6D" stroke-width="1" stroke-dasharray="2,2"/>
+          <text x="36" y="22" class="svg-label-red" font-size="8">Oscurecida</text>
+          <line x1="57" y1="20" x2="78" y2="20" stroke="#FF4D6D" stroke-width="0.8"/>
+          <!-- label -->
+          <text x="95" y="62" class="svg-label-amber" font-size="9">Arco</text>
+          <text x="95" y="72" class="svg-label-amber" font-size="9">→ Subclavia</text>
+        </svg>
+      </div>
+      <div class="card-body">
+        <div class="info-row">
+          <div class="info-label">Formación</div>
+          <div class="info-value">LSD izq. + grasa adyacente a pared traqueal izq. (o pared traqueal directamente)</div>
+        </div>
+        <div class="info-row">
+          <div class="info-label">Extensión</div>
+          <div class="info-value">Arco aórtico → A. subclavia izquierda superiormente</div>
+        </div>
+        <div class="info-row">
+          <div class="info-label">¿Por qué menos visible?</div>
+          <div class="info-value">Interposición de A. carótida común izq. (anterior) y A. subclavia izq. (posterior)</div>
+        </div>
+        <div class="card-divider"></div>
+        <div class="patho-title">Causas de alteración</div>
+        <div class="tags-wrap">
+          <span class="tag tag-amber">Derrame pleural izq. ← más común</span>
+          <span class="tag tag-red">Linfadenopatía izq.</span>
+          <span class="tag tag-red">Neoplasia (ej. Ca. tiroideo)</span>
+          <span class="tag tag-red">Hematoma mediastínico</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- SECTION: AP REGION -->
+  <div class="section-label">03 — Región Aortopulmonar (⚠ No confundir)</div>
+  <div class="cards-grid wide">
+
+    <!-- CARD: AP Stripe -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-type-dot dot-iface"></div>
+        <div class="card-title-wrap">
+          <div class="card-eyebrow ey-iface">Interface · Proyección PA</div>
+          <div class="card-title">Raya Aortopulmonar (AP Stripe)</div>
+        </div>
+      </div>
+      <div class="card-diagram">
+        <svg viewBox="0 0 260 140" width="260" height="140" xmlns="http://www.w3.org/2000/svg">
+          <rect width="260" height="140" fill="#0C1020"/>
+          <!-- aortic arch -->
+          <path d="M120,20 Q105,15 90,25 Q75,38 80,55 Q88,70 110,72" fill="none" stroke="#3A4A6A" stroke-width="2.5"/>
+          <text x="60" y="42" class="svg-label" fill="#5A7099">Arco</text>
+          <text x="60" y="52" class="svg-label" fill="#5A7099">Aórtico</text>
+          <!-- main pulmonary artery -->
+          <ellipse cx="115" cy="95" rx="28" ry="18" fill="none" stroke="#3A4A6A" stroke-width="2"/>
+          <text x="98" y="98" class="svg-label" fill="#5A7099">A.P.I.</text>
+          <!-- left lung anterior -->
+          <path d="M25,10 Q10,50 12,120 L80,120 L80,10 Z" fill="rgba(54,211,153,0.04)" stroke="#1F2D4A" stroke-width="1"/>
+          <!-- mediastinal fat anterolateral -->
+          <path d="M80,25 Q88,30 90,55 Q88,72 82,80 L78,80 Q70,72 70,50 Q72,30 80,25 Z" fill="rgba(255,184,48,0.08)" stroke="#FFB830" stroke-width="0.8" stroke-dasharray="2,2"/>
+          <text x="45" y="52" class="svg-label" fill="#FFB830" font-size="8">Grasa</text>
+          <text x="45" y="62" class="svg-label" fill="#FFB830" font-size="8">mediastínica</text>
+          <!-- THE AP STRIPE -->
+          <path d="M80,25 Q77,52 80,80" fill="none" stroke="#36D399" stroke-width="2.5"/>
+          <text x="20" y="118" class="svg-label-green" font-size="9">AP Stripe (ANTERIOR)</text>
+          <!-- arrow showing tangential contact -->
+          <line x1="60" y1="55" x2="78" y2="55" stroke="#36D399" stroke-width="1" stroke-dasharray="2,1"/>
+          <text x="18" y="58" class="svg-label" fill="#36D399" font-size="8">Contacto</text>
+          <text x="18" y="68" class="svg-label" fill="#36D399" font-size="8">tangencial</text>
+        </svg>
+      </div>
+      <div class="card-body">
+        <div class="info-row">
+          <div class="info-label">Formación</div>
+          <div class="info-value">Pleura anterior del pulmón izquierdo contacta <em>tangencialmente</em> la grasa anterolateral a la A. pulmonar y arco aórtico</div>
+        </div>
+        <div class="info-row">
+          <div class="info-label">Morfología</div>
+          <div class="info-value">Recta o levemente convexa. Cruza lateralmente el arco aórtico y la arteria pulmonar principal</div>
+        </div>
+        <div class="info-row">
+          <div class="info-label">Posición</div>
+          <div class="info-value"><strong style="color:var(--cyan)">ANTERIOR</strong> a la ventana AP</div>
+        </div>
+        <div class="card-divider"></div>
+        <div class="patho-title">Alteración → convexidad lateral aumentada</div>
+        <div class="tags-wrap">
+          <span class="tag tag-red">Masa tímica o tiroidea</span>
+          <span class="tag tag-red">Linfadenopatía prevascular</span>
+          <span class="tag tag-cyan">Neumomediastino (elevación)</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- CARD: AP Window -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-type-dot dot-iface"></div>
+        <div class="card-title-wrap">
+          <div class="card-eyebrow ey-iface">Interface · Proyección PA</div>
+          <div class="card-title">Ventana Aortopulmonar (AP Window)</div>
+        </div>
+      </div>
+      <div class="card-diagram">
+        <svg viewBox="0 0 260 140" width="260" height="140" xmlns="http://www.w3.org/2000/svg">
+          <rect width="260" height="140" fill="#0C1020"/>
+          <!-- ascending aorta -->
+          <path d="M140,10 L140,70" stroke="#3A4A6A" stroke-width="3"/>
+          <text x="145" y="40" class="svg-label" fill="#5A7099">Ao asc.</text>
+          <!-- descending aorta -->
+          <path d="M105,30 L105,130" stroke="#3A4A6A" stroke-width="3"/>
+          <text x="75" y="120" class="svg-label" fill="#5A7099">Ao desc.</text>
+          <!-- aortic arch top -->
+          <path d="M105,30 Q120,10 140,10" fill="none" stroke="#3A4A6A" stroke-width="2.5"/>
+          <text x="112" y="14" class="svg-label" fill="#5A7099">Arco Ao.</text>
+          <!-- LPA -->
+          <path d="M105,95 Q120,90 140,95" fill="none" stroke="#3A4A6A" stroke-width="2.5"/>
+          <text x="145" y="92" class="svg-label" fill="#5A7099">A.P.I.</text>
+          <!-- AP WINDOW space fill -->
+          <path d="M105,30 L140,30 L140,95 L105,95 Z" fill="rgba(54,211,153,0.07)" stroke="none"/>
+          <!-- AP Window lateral border = THE INTERFACE -->
+          <path d="M105,30 Q96,62 105,95" fill="none" stroke="#36D399" stroke-width="2.5"/>
+          <text x="50" y="62" class="svg-label-green" font-size="9">Interface</text>
+          <text x="50" y="72" class="svg-label-green" font-size="9">(borde lateral)</text>
+          <!-- normal concave annotation -->
+          <path d="M80,55 Q88,62 80,72" fill="none" stroke="#36D399" stroke-width="1" stroke-dasharray="2,2"/>
+          <text x="20" y="60" class="svg-label" fill="#36D399" font-size="8">Cóncavo</text>
+          <text x="20" y="70" class="svg-label" fill="#36D399" font-size="8">= Normal</text>
+          <!-- trachea medial border -->
+          <rect x="155" y="10" width="12" height="50" fill="none" stroke="#2A3A5A" stroke-width="1" stroke-dasharray="2,2"/>
+          <text x="170" y="35" class="svg-label" fill="#5A7099" font-size="8">Tráq.</text>
+          <!-- esophagus -->
+          <ellipse cx="162" cy="75" rx="5" ry="20" fill="none" stroke="#2A3A5A" stroke-width="1" stroke-dasharray="2,1"/>
+          <text x="170" y="78" class="svg-label" fill="#5A7099" font-size="8">Esóf.</text>
+          <!-- contents label -->
+          <text x="112" y="55" class="svg-label" fill="#2A3A5A" font-size="8">Contenido:</text>
+          <text x="108" y="65" class="svg-label" fill="#2A3A5A" font-size="7">N. recurrente</text>
+          <text x="108" y="74" class="svg-label" fill="#2A3A5A" font-size="7">N. vago</text>
+          <text x="108" y="83" class="svg-label" fill="#2A3A5A" font-size="7">Lig. arteriosum</text>
+          <text x="20" y="128" class="svg-label-green" font-size="9">AP Window (POSTERIOR al AP Stripe)</text>
+        </svg>
+      </div>
+      <div class="card-body">
+        <div class="info-row">
+          <div class="info-label">Límites</div>
+          <div class="info-value">Sup: arco Ao. · Inf: A.P.I. · Ant: Ao. asc. · Post: Ao. desc. · Medial: tráquea / esófago</div>
+        </div>
+        <div class="info-row">
+          <div class="info-label">Interface</div>
+          <div class="info-value">Borde <em>lateral</em>: pulmón izq. contacta arco Ao. y se extiende a A.P.I. → concavidad normal</div>
+        </div>
+        <div class="info-row">
+          <div class="info-label">Contenido</div>
+          <div class="info-value">N. laríngeo recurrente izq., N. vago, lig. arteriosum, linfonodos, A. bronquiales</div>
+        </div>
+        <div class="info-row">
+          <div class="info-label">⚠ Clave</div>
+          <div class="info-value">Convexidad = ANORMAL. Parálisis de cuerda vocal izq. → buscar patología aquí</div>
+        </div>
+        <div class="card-divider"></div>
+        <div class="patho-title">Causas de convexidad anormal</div>
+        <div class="tags-wrap">
+          <span class="tag tag-red">Linfadenopatía (más frecuente)</span>
+          <span class="tag tag-red">Aneurisma aórtico</span>
+          <span class="tag tag-red">Aneurisma A. bronquial</span>
+          <span class="tag tag-red">Tumor vaina nerviosa</span>
+          <span class="tag tag-amber">Grasa mediastínica prominente</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- SECTION: PARASPINAL -->
+  <div class="section-label">04 — Líneas Paraespinales</div>
+  <div class="cards-grid">
+
+    <!-- CARD: Right Paraspinal -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-type-dot dot-iface"></div>
+        <div class="card-title-wrap">
+          <div class="card-eyebrow ey-iface">Interface · Fenómeno de Mach</div>
+          <div class="card-title">Línea Paraespinal Derecha</div>
+        </div>
+        <div class="card-freq">23%</div>
+      </div>
+      <div class="card-diagram">
+        <svg viewBox="0 0 200 130" width="200" height="130" xmlns="http://www.w3.org/2000/svg">
+          <rect width="200" height="130" fill="#0C1020"/>
+          <!-- vertebral column -->
+          <rect x="88" y="5" width="24" height="120" rx="3" fill="#0F1828" stroke="#2A3A5A" stroke-width="1.5"/>
+          <text x="92" y="35" class="svg-label" fill="#2A3A5A">T8</text>
+          <text x="92" y="55" class="svg-label" fill="#2A3A5A">T9</text>
+          <text x="92" y="75" class="svg-label" fill="#2A3A5A">T10</text>
+          <text x="92" y="95" class="svg-label" fill="#2A3A5A">T11</text>
+          <text x="92" y="115" class="svg-label" fill="#2A3A5A">T12</text>
+          <!-- right lung -->
+          <path d="M170,5 Q188,40 185,125 L112,125 L112,5 Z" fill="rgba(54,211,153,0.04)" stroke="#1F2D4A" stroke-width="1"/>
+          <!-- mediastinal fat right -->
+          <rect x="112" y="20" width="15" height="100" fill="rgba(255,184,48,0.05)"/>
+          <!-- THE LINE (interface, not true line) -->
+          <line x1="127" y1="20" x2="127" y2="118" stroke="#36D399" stroke-width="2"/>
+          <!-- Mach band visual effect -->
+          <line x1="130" y1="20" x2="130" y2="118" stroke="rgba(255,255,255,0.08)" stroke-width="3"/>
+          <text x="140" y="65" class="svg-label-green">Interfaz</text>
+          <text x="140" y="75" class="svg-label-green">+ Mach</text>
+          <!-- extent -->
+          <line x1="84" y1="20" x2="84" y2="118" stroke="#2A3A5A" stroke-width="1" stroke-dasharray="2,2"/>
+          <text x="18" y="65" class="svg-label" fill="#5A7099">T8→T12</text>
+        </svg>
+      </div>
+      <div class="card-body">
+        <div class="info-row">
+          <div class="info-label">Naturaleza</div>
+          <div class="info-value">Interface pulmón-mediastino posterior (no una línea verdadera). La "línea blanca" visible es <em>fenómeno de Mach</em></div>
+        </div>
+        <div class="info-row">
+          <div class="info-label">Extensión</div>
+          <div class="info-value">T8 → T12, lateral a la columna torácica</div>
+        </div>
+        <div class="info-row">
+          <div class="info-label">Morfología</div>
+          <div class="info-value">Línea recta paralela a la columna</div>
+        </div>
+        <div class="card-divider"></div>
+        <div class="patho-title">Desplazamiento lateral anormal</div>
+        <div class="tags-wrap">
+          <span class="tag tag-red">Hematoma mediastínico</span>
+          <span class="tag tag-red">Masa posterior</span>
+          <span class="tag tag-red">Hematopoyesis extramedular</span>
+          <span class="tag tag-amber">Osteofitos vertebrales</span>
+          <span class="tag tag-amber">Grasa mediastínica prominente</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- CARD: Left Paraspinal -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-type-dot dot-iface"></div>
+        <div class="card-title-wrap">
+          <div class="card-eyebrow ey-iface">Interface · Fenómeno de Mach</div>
+          <div class="card-title">Línea Paraespinal Izquierda</div>
+        </div>
+        <div class="card-freq" style="color:var(--cyan)">41%</div>
+      </div>
+      <div class="card-diagram">
+        <svg viewBox="0 0 200 130" width="200" height="130" xmlns="http://www.w3.org/2000/svg">
+          <rect width="200" height="130" fill="#0C1020"/>
+          <!-- vertebral column -->
+          <rect x="88" y="5" width="24" height="120" rx="3" fill="#0F1828" stroke="#2A3A5A" stroke-width="1.5"/>
+          <!-- descending aorta (the key!) -->
+          <ellipse cx="75" cy="65" rx="14" ry="55" fill="rgba(255,184,48,0.08)" stroke="#FFB830" stroke-width="1.5"/>
+          <text x="48" y="55" class="svg-label" fill="#FFB830">Ao.</text>
+          <text x="45" y="65" class="svg-label" fill="#FFB830">Desc.</text>
+          <!-- left lung -->
+          <path d="M25,5 Q8,40 10,125 L88,125 L88,5 Z" fill="rgba(54,211,153,0.04)" stroke="#1F2D4A" stroke-width="1"/>
+          <!-- THE LINE (medial to aorta) -->
+          <line x1="60" y1="12" x2="62" y2="118" stroke="#36D399" stroke-width="2"/>
+          <!-- aorta arch -->
+          <path d="M62,12 Q70,5 85,10 Q88,12 88,18" fill="none" stroke="#FFB830" stroke-width="1.5" stroke-dasharray="2,1"/>
+          <!-- Mach band -->
+          <line x1="57" y1="12" x2="59" y2="118" stroke="rgba(255,255,255,0.08)" stroke-width="3"/>
+          <text x="18" y="118" class="svg-label-green" font-size="9">Arco Ao. → Diafragma</text>
+          <!-- more frequent note -->
+          <text x="130" y="55" class="svg-label" fill="#00C9C8" font-size="8">Más frecuente</text>
+          <text x="130" y="65" class="svg-label" fill="#00C9C8" font-size="8">que la derecha</text>
+          <text x="130" y="75" class="svg-label" fill="#00C9C8" font-size="8">← por Ao. desc.</text>
+        </svg>
+      </div>
+      <div class="card-body">
+        <div class="info-row">
+          <div class="info-label">Formación</div>
+          <div class="info-value">Contacto tangencial del pulmón izq. con grasa mediastínica posterior, músculos paraespinales y aorta descendente</div>
+        </div>
+        <div class="info-row">
+          <div class="info-label">Extensión</div>
+          <div class="info-value">Arco aórtico → diafragma. Generalmente <em>medial</em> a la pared lateral de la Ao. descendente</div>
+        </div>
+        <div class="info-row">
+          <div class="info-label">Mayor frecuencia</div>
+          <div class="info-value">La Ao. descendente <em>promueve</em> el contacto tangencial necesario para la interface</div>
+        </div>
+        <div class="card-divider"></div>
+        <div class="patho-title">Causas adicionales vs. lado derecho</div>
+        <div class="tags-wrap">
+          <span class="tag tag-red">Varices esofágicas</span>
+          <span class="tag tag-red">Hematoma mediastínico</span>
+          <span class="tag tag-red">Hematopoyesis extramedular</span>
+          <span class="tag tag-amber">Tortuosidad aórtica</span>
+          <span class="tag tag-amber">Osteofitos</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- SECTION: LATERAL STRIPES -->
+  <div class="section-label">05 — Rayas en Proyección Lateral</div>
+  <div class="cards-grid wide">
+
+    <!-- CARD: Posterior Tracheal Stripe -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-type-dot dot-stripe"></div>
+        <div class="card-title-wrap">
+          <div class="card-eyebrow ey-stripe">Stripe · Proyección Lateral</div>
+          <div class="card-title">Raya Traqueal Posterior (Traqueoesofágica)</div>
+        </div>
+      </div>
+      <div class="card-diagram">
+        <svg viewBox="0 0 260 140" width="260" height="140" xmlns="http://www.w3.org/2000/svg">
+          <rect width="260" height="140" fill="#0C1020"/>
+          <!-- trachea lumen -->
+          <rect x="80" y="5" width="50" height="85" fill="rgba(0,201,200,0.05)" stroke="#2A3A5A" stroke-width="1.5"/>
+          <text x="88" y="50" class="svg-label">TRÁQUEA</text>
+          <!-- right lung (outlines posterior tracheal wall) -->
+          <path d="M130,5 Q180,20 185,100 L130,100 Z" fill="rgba(255,184,48,0.04)" stroke="#1F2D4A" stroke-width="1"/>
+          <!-- posterior tracheal wall -->
+          <line x1="130" y1="5" x2="130" y2="90" stroke="#2A3A5A" stroke-width="1.5"/>
+          <!-- THE STRIPE -->
+          <rect x="130" y="5" width="8" height="85" fill="rgba(255,184,48,0.2)" stroke="#FFB830" stroke-width="1.5"/>
+          <!-- esophagus (when in contact) -->
+          <rect x="138" y="20" width="12" height="60" fill="rgba(54,211,153,0.08)" stroke="#36D399" stroke-width="1" stroke-dasharray="2,2"/>
+          <text x="152" y="52" class="svg-label" fill="#36D399" font-size="8">Esóf.</text>
+          <!-- measurement -->
+          <line x1="130" y1="100" x2="138" y2="100" stroke="#FFB830" stroke-width="1.5"/>
+          <text x="130" y="112" class="svg-label-amber" font-size="9">≤2.5mm</text>
+          <line x1="130" y1="118" x2="150" y2="118" stroke="#36D399" stroke-width="1.5"/>
+          <text x="130" y="130" class="svg-label" fill="#36D399" font-size="8.5">≤5.5mm (c/esóf.)</text>
+          <!-- retrotracheal triangle -->
+          <path d="M80,5 L80,90 Q80,95 85,95 L130,90 L130,5 Z" fill="rgba(255,77,109,0.04)" stroke="#FF4D6D" stroke-width="1" stroke-dasharray="3,2"/>
+          <text x="20" y="55" class="svg-label-red" font-size="8">Triángulo</text>
+          <text x="20" y="65" class="svg-label-red" font-size="8">Retrotraqueal</text>
+          <text x="18" y="75" class="svg-label-red" font-size="8">(Raider)</text>
+          <line x1="52" y1="65" x2="79" y2="65" stroke="#FF4D6D" stroke-width="0.8"/>
+          <!-- thoracic inlet top -->
+          <line x1="80" y1="5" x2="240" y2="5" stroke="#1F2D4A" stroke-width="1" stroke-dasharray="2,2"/>
+          <text x="180" y="14" class="svg-label" fill="#5A7099" font-size="8">Entrada torácica</text>
+          <!-- aortic arch bottom of triangle -->
+          <path d="M80,90 Q100,95 110,90" fill="none" stroke="#2A3A5A" stroke-width="1.5"/>
+          <text x="70" y="108" class="svg-label" fill="#5A7099" font-size="8">Arco Ao. (límite inf.)</text>
+          <!-- spine posterior -->
+          <rect x="22" y="5" width="40" height="130" fill="none" stroke="#2A3A5A" stroke-width="1"/>
+          <text x="30" y="70" class="svg-label" fill="#2A3A5A">COLUMNA</text>
+        </svg>
+      </div>
+      <div class="card-body">
+        <div class="info-row">
+          <div class="info-label">Formación</div>
+          <div class="info-value">Aire traqueal + pulmón derecho delimitan la pared traqueal posterior e intervening soft tissue</div>
+        </div>
+        <div class="info-row">
+          <div class="info-label">Grosor normal</div>
+          <div class="info-value"><span style="color:var(--amber);font-family:'JetBrains Mono',monospace;font-weight:600">≤ 2.5 mm</span> · Hasta <span style="color:var(--green);font-family:'JetBrains Mono',monospace;font-weight:600">5.5 mm</span> si incluye pared esofágica anterior</div>
+        </div>
+        <div class="info-row">
+          <div class="info-label">Triángulo</div>
+          <div class="info-value">Borde anterior del espacio retrotraqueal (Raider): columna post., arco Ao. inf., entrada torácica sup.</div>
+        </div>
+        <div class="info-row">
+          <div class="info-label">Anomalía frecuente</div>
+          <div class="info-value">Anomalías congénitas del arco aórtico (más comunes dentro del espacio retrotraqueal)</div>
+        </div>
+        <div class="card-divider"></div>
+        <div class="patho-title">Engrosamiento anormal</div>
+        <div class="tags-wrap">
+          <span class="tag tag-red">Anomalías arco aórtico ← #1</span>
+          <span class="tag tag-red">Acalasia / masa esofágica</span>
+          <span class="tag tag-red">Lesiones vasculares adquiridas</span>
+          <span class="tag tag-red">Hematoma postraumático</span>
+          <span class="tag tag-amber">Malformaciones linfáticas</span>
+          <span class="tag tag-amber">Mediastinitis</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- CARD: Bronchus Intermedius -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-type-dot dot-stripe"></div>
+        <div class="card-title-wrap">
+          <div class="card-eyebrow ey-stripe">Stripe · Proyección Lateral</div>
+          <div class="card-title">Pared Posterior del Bronquio Intermedio</div>
+        </div>
+        <div class="card-freq" style="color:var(--cyan)">90–95%</div>
+      </div>
+      <div class="card-diagram">
+        <svg viewBox="0 0 260 140" width="260" height="140" xmlns="http://www.w3.org/2000/svg">
+          <rect width="260" height="140" fill="#0C1020"/>
+          <!-- main bronchus -->
+          <rect x="100" y="8" width="18" height="30" fill="none" stroke="#2A3A5A" stroke-width="1.5"/>
+          <text x="120" y="22" class="svg-label" fill="#5A7099">B. Ppal.</text>
+          <!-- RUL bronchus -->
+          <path d="M118,20 Q140,16 155,20" fill="none" stroke="#2A3A5A" stroke-width="1.5"/>
+          <text x="158" y="22" class="svg-label" fill="#5A7099">LSD</text>
+          <!-- bronchus intermedius -->
+          <rect x="100" y="38" width="18" height="38" fill="rgba(255,184,48,0.08)" stroke="#2A3A5A" stroke-width="1.5"/>
+          <text x="68" y="57" class="svg-label" fill="#5A7099" font-size="8">Bronquio</text>
+          <text x="65" y="67" class="svg-label" fill="#5A7099" font-size="8">Intermedio</text>
+          <text x="65" y="77" class="svg-label" fill="#5A7099" font-size="8">3-4 cm</text>
+          <!-- azygoesophageal recess outlines posterior wall -->
+          <path d="M118,38 Q130,50 128,75" fill="rgba(54,211,153,0.08)" stroke="#36D399" stroke-width="1" stroke-dasharray="2,1"/>
+          <text x="132" y="58" class="svg-label" fill="#36D399" font-size="8">Rec. Azigo.</text>
+          <!-- THE STRIPE - posterior wall -->
+          <line x1="118" y1="38" x2="118" y2="76" stroke="#FFB830" stroke-width="2.5"/>
+          <!-- left upper lobe bronchus radiolucency (where it projects through) -->
+          <ellipse cx="75" cy="58" rx="20" ry="18" fill="rgba(0,0,0,0.3)" stroke="#1F2D4A" stroke-width="1" stroke-dasharray="2,2"/>
+          <text x="50" y="55" class="svg-label" fill="#5A7099" font-size="8">LUI</text>
+          <text x="50" y="65" class="svg-label" fill="#5A7099" font-size="8">Bronquio</text>
+          <!-- projection line through LUL bronchus -->
+          <line x1="75" y1="38" x2="75" y2="76" stroke="#FFB830" stroke-width="1" stroke-dasharray="3,2" opacity="0.5"/>
+          <line x1="75" y1="57" x2="118" y2="57" stroke="#FFB830" stroke-width="0.8" stroke-dasharray="2,2" opacity="0.5"/>
+          <text x="80" y="46" class="svg-label" fill="#FFB830" font-size="8">Proyecta a través</text>
+          <!-- measurement -->
+          <text x="130" y="90" class="svg-label-amber" font-size="9">0.5 – 3.0 mm</text>
+          <text x="20" y="125" class="svg-label-amber" font-size="9">Pared post. B. Intermedio (90–95% PA)</text>
+        </svg>
+      </div>
+      <div class="card-body">
+        <div class="info-row">
+          <div class="info-label">Formación</div>
+          <div class="info-value">Pulmón en el receso azigoesofágico delimita la pared posterior del bronquio intermedio</div>
+        </div>
+        <div class="info-row">
+          <div class="info-label">Proyección</div>
+          <div class="info-value">Raya fina, vertical u oblicua, que proyecta a través del área radiolúcida del bronquio LUI en lateral</div>
+        </div>
+        <div class="info-row">
+          <div class="info-label">Grosor normal</div>
+          <div class="info-value"><span style="color:var(--amber);font-family:'JetBrains Mono',monospace;font-weight:600">0.5 – 3.0 mm</span></div>
+        </div>
+        <div class="card-divider"></div>
+        <div class="patho-title">Engrosamiento anormal</div>
+        <div class="tags-wrap">
+          <span class="tag tag-amber">Edema pulmonar / ICC ← bandiforme</span>
+          <span class="tag tag-red">Ca. pulmonar primario</span>
+          <span class="tag tag-red">Linfoma</span>
+          <span class="tag tag-red">Metástasis</span>
+          <span class="tag tag-red">TBC / Sarcoidosis</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- SECTION: AZYGOESOPHAGEAL -->
+  <div class="section-label">06 — Receso Azigoesofágico</div>
+  <div class="cards-grid">
+    <div class="card">
+      <div class="card-header">
+        <div class="card-type-dot dot-iface"></div>
+        <div class="card-title-wrap">
+          <div class="card-eyebrow ey-iface">Interface · Proyección PA</div>
+          <div class="card-title">Receso Azigoesofágico</div>
+        </div>
+      </div>
+      <div class="card-diagram">
+        <svg viewBox="0 0 200 140" width="200" height="140" xmlns="http://www.w3.org/2000/svg">
+          <rect width="200" height="140" fill="#0C1020"/>
+          <!-- spine -->
+          <rect x="88" y="5" width="24" height="130" rx="2" fill="#0F1828" stroke="#2A3A5A" stroke-width="1.5"/>
+          <!-- esophagus -->
+          <ellipse cx="100" cy="70" rx="8" ry="55" fill="rgba(255,184,48,0.07)" stroke="#FFB830" stroke-width="1" stroke-dasharray="2,1"/>
+          <text x="108" y="70" class="svg-label" fill="#FFB830" font-size="8">Esóf.</text>
+          <!-- azygos vein -->
+          <path d="M112,35 Q125,32 130,38 Q140,48 130,55 L112,55" fill="none" stroke="#3A5A8A" stroke-width="1.5"/>
+          <text x="133" y="45" class="svg-label" fill="#5A7099" font-size="8">V. Ácigos</text>
+          <!-- RLL outlines the recess -->
+          <path d="M165,35 Q175,70 172,130 L112,130 L112,35 Z" fill="rgba(54,211,153,0.04)" stroke="#1F2D4A" stroke-width="1"/>
+          <!-- THE INTERFACE — three zones -->
+          <!-- upper (subcarinal, mild L convexity) -->
+          <path d="M112,35 Q108,55 112,70" fill="none" stroke="#36D399" stroke-width="2.5"/>
+          <text x="55" y="52" class="svg-label" fill="#36D399" font-size="8">1/3 sup.</text>
+          <text x="55" y="62" class="svg-label" fill="#36D399" font-size="8">Convexa ←</text>
+          <!-- middle (variable) -->
+          <path d="M112,70 Q109,90 112,105" fill="none" stroke="#36D399" stroke-width="2.5" stroke-dasharray="3,1"/>
+          <text x="55" y="90" class="svg-label" fill="#36D399" font-size="8">1/3 medio</text>
+          <text x="55" y="100" class="svg-label" fill="#36D399" font-size="8">Variable</text>
+          <!-- lower (straight) -->
+          <path d="M112,105 L112,130" fill="none" stroke="#36D399" stroke-width="2.5"/>
+          <text x="55" y="120" class="svg-label" fill="#36D399" font-size="8">1/3 inf.</text>
+          <text x="55" y="130" class="svg-label" fill="#36D399" font-size="8">Recto</text>
+          <!-- aortic hiatus label -->
+          <line x1="112" y1="130" x2="165" y2="130" stroke="#2A3A5A" stroke-width="1" stroke-dasharray="2,2"/>
+          <text x="140" y="138" class="svg-label" fill="#5A7099" font-size="8">Hiato Ao.</text>
+        </svg>
+      </div>
+      <div class="card-body">
+        <div class="info-row">
+          <div class="info-label">Naturaleza</div>
+          <div class="info-value">Interface (no línea ni stripe) entre LII y mediastino adyacente al esófago / V. ácigos</div>
+        </div>
+        <div class="info-row">
+          <div class="info-label">Extensión</div>
+          <div class="info-value">Rodilla anterior de V. ácigos → hiato aórtico (inferior)</div>
+        </div>
+        <div class="info-row">
+          <div class="info-label">Morfología</div>
+          <div class="info-value">1/3 sup.: convexa leve ←izq (continua con espacio subcarínico) · 1/3 medio: variable · 1/3 inf.: recto</div>
+        </div>
+        <div class="info-row">
+          <div class="info-label">⚠ Alerta edad</div>
+          <div class="info-value">Convexidad derecha en el 1/3 superior = <em>normal en jóvenes</em>, <strong>anormal en adultos mayores</strong></div>
+        </div>
+        <div class="card-divider"></div>
+        <div class="patho-title">Causas de convexidad / alteración</div>
+        <div class="tags-wrap">
+          <span class="tag tag-red">Linfadenopatía</span>
+          <span class="tag tag-red">Hernia hiatal</span>
+          <span class="tag tag-red">Neoplasia esofágica</span>
+          <span class="tag tag-red">Malformación broncopulmonar</span>
+          <span class="tag tag-amber">Cardiomegalia + crecim. AI</span>
+          <span class="tag tag-amber">Anomalías pleurales</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- MEASUREMENTS TABLE CARD -->
+    <div class="card" style="border-color: var(--border)">
+      <div class="card-header">
+        <div class="card-type-dot" style="background:#8A9EC0"></div>
+        <div class="card-title-wrap">
+          <div class="card-eyebrow" style="color:#8A9EC0">Referencia Rápida</div>
+          <div class="card-title">Medidas y Frecuencias Normales</div>
+        </div>
+      </div>
+      <div class="card-body" style="padding:0">
+        <table class="meas-table">
+          <thead>
+            <tr>
+              <th>Estructura</th>
+              <th>Grosor / Límite</th>
+              <th>Frecuencia PA</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="meas-name">L. Unión Anterior</td>
+              <td class="meas-val">&lt; 1 mm</td>
+              <td>24–57%</td>
+            </tr>
+            <tr>
+              <td class="meas-name">L. Unión Posterior</td>
+              <td class="meas-val">&lt; 1 mm</td>
+              <td>32%</td>
+            </tr>
+            <tr>
+              <td class="meas-name">Raya Paratraqueal Der.</td>
+              <td class="meas-val">≤ 4 mm</td>
+              <td style="color:var(--cyan)">97%</td>
+            </tr>
+            <tr>
+              <td class="meas-name">Raya Paratraqueal Izq.</td>
+              <td class="meas-val">—</td>
+              <td>21–31%</td>
+            </tr>
+            <tr>
+              <td class="meas-name">L. Paraespinal Derecha</td>
+              <td class="meas-val">—</td>
+              <td>23%</td>
+            </tr>
+            <tr>
+              <td class="meas-name">L. Paraespinal Izquierda</td>
+              <td class="meas-val">—</td>
+              <td>41%</td>
+            </tr>
+            <tr>
+              <td class="meas-name">Raya Traqueal Post.</td>
+              <td class="meas-val">≤ 2.5 mm<br><span style="color:var(--green);font-size:10px">≤ 5.5 mm c/ esóf.</span></td>
+              <td>Lateral</td>
+            </tr>
+            <tr>
+              <td class="meas-name">Pared Post. B. Intermedius</td>
+              <td class="meas-val">0.5 – 3.0 mm</td>
+              <td style="color:var(--cyan)">90–95%</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+
+</div><!-- end main-content -->
+
+<!-- ══════════════ FOOTER ══════════════ -->
+<footer>
+  <span>Gibbs JM et al. Lines and Stripes: Where Did They Go? RadioGraphics 2007;27:33–48 · DOI: 10.1148/rg.271065073</span>
+  <span>Dashboard de estudio · Residencia de Radiología</span>
+</footer>
+
+</body>
+</html>`},
+  {title:"Artritis Reumatoide — Hallazgos Radiograficos", topic:"msk", date:"2026-07-06", html: `<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AR — Hallazgos Radiográficos</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+
+  :root {
+    --bg: #0e1117;
+    --surface: #161b25;
+    --surface2: #1e2535;
+    --border: #2a3347;
+    --accent: #4fc3f7;
+    --accent2: #ef6c6c;
+    --accent3: #81c784;
+    --accent4: #ffb74d;
+    --text: #e8edf5;
+    --muted: #7a8ba8;
+    --dim: #3d4f6b;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', sans-serif;
+    min-height: 100vh;
+    padding: 48px 24px;
+  }
+
+  /* ── HEADER ── */
+  .header {
+    text-align: center;
+    margin-bottom: 56px;
+    position: relative;
+  }
+
+  .eyebrow {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 3px;
+    color: var(--accent);
+    text-transform: uppercase;
+    margin-bottom: 16px;
+    opacity: 0.9;
+  }
+
+  h1 {
+    font-family: 'DM Serif Display', serif;
+    font-size: clamp(2rem, 5vw, 3.4rem);
+    line-height: 1.1;
+    color: var(--text);
+    margin-bottom: 12px;
+  }
+
+  h1 em {
+    font-style: italic;
+    color: var(--accent);
+  }
+
+  .subtitle {
+    font-size: 14px;
+    color: var(--muted);
+    font-weight: 300;
+    letter-spacing: 0.3px;
+  }
+
+  .header-line {
+    width: 60px;
+    height: 2px;
+    background: linear-gradient(90deg, var(--accent), transparent);
+    margin: 20px auto 0;
+  }
+
+  /* ── TIMELINE RAIL ── */
+  .timeline {
+    max-width: 960px;
+    margin: 0 auto;
+    position: relative;
+  }
+
+  .timeline::before {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    background: linear-gradient(to bottom, var(--accent), var(--accent2), var(--accent3));
+    transform: translateX(-50%);
+    opacity: 0.3;
+  }
+
+  /* ── PHASE BLOCKS ── */
+  .phase {
+    margin-bottom: 48px;
+  }
+
+  .phase-header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 24px;
+    justify-content: center;
+  }
+
+  .phase-badge {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 2px;
+    padding: 5px 14px;
+    border-radius: 2px;
+    text-transform: uppercase;
+    font-weight: 500;
+  }
+
+  .badge-early  { background: rgba(79,195,247,0.12); color: var(--accent);  border: 1px solid rgba(79,195,247,0.3); }
+  .badge-mid    { background: rgba(255,183,77,0.12); color: var(--accent4); border: 1px solid rgba(255,183,77,0.3); }
+  .badge-late   { background: rgba(239,108,108,0.12); color: var(--accent2); border: 1px solid rgba(239,108,108,0.3); }
+  .badge-dist   { background: rgba(129,199,132,0.12); color: var(--accent3); border: 1px solid rgba(129,199,132,0.3); }
+
+  .phase-title {
+    font-family: 'DM Serif Display', serif;
+    font-size: 1.3rem;
+    color: var(--text);
+  }
+
+  /* ── CARD GRID ── */
+  .card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 16px;
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px 22px;
+    position: relative;
+    overflow: hidden;
+    transition: border-color 0.2s;
+  }
+
+  .card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+  }
+
+  .card.early::before  { background: var(--accent); }
+  .card.mid::before    { background: var(--accent4); }
+  .card.late::before   { background: var(--accent2); }
+  .card.dist::before   { background: var(--accent3); }
+
+  .card-icon {
+    font-size: 22px;
+    margin-bottom: 10px;
+    display: block;
+  }
+
+  .card-name {
+    font-family: 'DM Serif Display', serif;
+    font-size: 1rem;
+    color: var(--text);
+    margin-bottom: 6px;
+  }
+
+  .card-tag {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 10px;
+    display: block;
+  }
+
+  .card-desc {
+    font-size: 12.5px;
+    line-height: 1.65;
+    color: #9aafc8;
+    font-weight: 300;
+  }
+
+  .card-highlight {
+    margin-top: 10px;
+    padding: 8px 10px;
+    border-radius: 4px;
+    font-size: 11.5px;
+    font-weight: 500;
+    line-height: 1.5;
+  }
+
+  .hl-blue   { background: rgba(79,195,247,0.08);  color: var(--accent);  border-left: 2px solid var(--accent); }
+  .hl-orange { background: rgba(255,183,77,0.08);  color: var(--accent4); border-left: 2px solid var(--accent4); }
+  .hl-red    { background: rgba(239,108,108,0.08); color: var(--accent2); border-left: 2px solid var(--accent2); }
+  .hl-green  { background: rgba(129,199,132,0.08); color: var(--accent3); border-left: 2px solid var(--accent3); }
+
+  /* ── ANATOMY SVG DIAGRAM ── */
+  .diagram-wrapper {
+    max-width: 960px;
+    margin: 0 auto 48px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 32px;
+  }
+
+  .diagram-title {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 2px;
+    color: var(--muted);
+    text-transform: uppercase;
+    text-align: center;
+    margin-bottom: 24px;
+  }
+
+  svg.hand-diagram {
+    display: block;
+    margin: 0 auto;
+    width: 100%;
+    max-width: 720px;
+    height: auto;
+  }
+
+  /* ── LARSEN TABLE ── */
+  .table-section {
+    max-width: 960px;
+    margin: 0 auto 48px;
+  }
+
+  .section-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 2px;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .section-label::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  .larsen-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+
+  .larsen-table th {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--muted);
+    padding: 10px 16px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .larsen-table td {
+    padding: 11px 16px;
+    border-bottom: 1px solid rgba(42,51,71,0.5);
+    color: #9aafc8;
+    font-size: 13px;
+    vertical-align: top;
+  }
+
+  .larsen-table tr:last-child td { border-bottom: none; }
+
+  .larsen-table tr:hover td { background: var(--surface2); }
+
+  .grade-chip {
+    display: inline-block;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 500;
+    padding: 3px 10px;
+    border-radius: 2px;
+    min-width: 32px;
+    text-align: center;
+  }
+
+  .g0 { background: rgba(79,195,247,0.1);  color: var(--accent); }
+  .g1 { background: rgba(129,199,132,0.1); color: var(--accent3); }
+  .g2 { background: rgba(255,183,77,0.1);  color: var(--accent4); }
+  .g3 { background: rgba(255,183,77,0.15); color: var(--accent4); }
+  .g4 { background: rgba(239,108,108,0.1); color: var(--accent2); }
+  .g5 { background: rgba(239,108,108,0.2); color: var(--accent2); }
+
+  .bar-track {
+    height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    margin-top: 6px;
+    width: 100%;
+  }
+
+  .bar-fill {
+    height: 4px;
+    border-radius: 2px;
+  }
+
+  /* ── KEY RULE BOX ── */
+  .key-rule {
+    max-width: 960px;
+    margin: 0 auto 48px;
+    background: rgba(79,195,247,0.05);
+    border: 1px solid rgba(79,195,247,0.2);
+    border-radius: 8px;
+    padding: 24px 28px;
+    display: flex;
+    gap: 20px;
+    align-items: flex-start;
+  }
+
+  .key-rule .icon {
+    font-size: 28px;
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+
+  .key-rule .content strong {
+    display: block;
+    font-family: 'DM Serif Display', serif;
+    font-size: 1.05rem;
+    color: var(--accent);
+    margin-bottom: 8px;
+  }
+
+  .key-rule .content p {
+    font-size: 13px;
+    color: #9aafc8;
+    line-height: 1.7;
+    font-weight: 300;
+  }
+
+  /* ── COMPARISON TABLE ── */
+  .compare-grid {
+    max-width: 960px;
+    margin: 0 auto 48px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+
+  .compare-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+
+  .compare-header {
+    padding: 14px 20px;
+    font-family: 'DM Serif Display', serif;
+    font-size: 1rem;
+  }
+
+  .compare-header.ar { background: rgba(239,108,108,0.1); color: var(--accent2); border-bottom: 1px solid rgba(239,108,108,0.2); }
+  .compare-header.oa { background: rgba(79,195,247,0.08); color: var(--accent);  border-bottom: 1px solid rgba(79,195,247,0.2); }
+
+  .compare-body { padding: 16px 20px; }
+
+  .compare-row {
+    display: flex;
+    gap: 10px;
+    align-items: baseline;
+    margin-bottom: 10px;
+    font-size: 12.5px;
+    color: #9aafc8;
+    line-height: 1.5;
+  }
+
+  .compare-row::before {
+    content: '—';
+    color: var(--dim);
+    flex-shrink: 0;
+    font-size: 10px;
+  }
+
+  /* ── FOOTER ── */
+  .footer {
+    max-width: 960px;
+    margin: 0 auto;
+    text-align: center;
+    padding-top: 32px;
+    border-top: 1px solid var(--border);
+  }
+
+  .footer p {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 1.5px;
+    color: var(--dim);
+    text-transform: uppercase;
+  }
+
+  @media (max-width: 600px) {
+    .timeline::before { display: none; }
+    .compare-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="header">
+  <div class="eyebrow">Radiología Musculoesquelética · Esquema de referencia</div>
+  <h1>Artritis <em>Reumatoide</em></h1>
+  <p class="subtitle">Hallazgos radiográficos · Cronología · Distribución · Estadificación de Larsen</p>
+  <div class="header-line"></div>
+</div>
+
+
+<!-- PHASE 1: TEMPRANOS -->
+<div class="timeline" style="max-width:960px;margin:0 auto 48px;">
+  <div class="phase">
+    <div class="phase-header">
+      <span class="phase-badge badge-early">Fase I — Hallazgos Tempranos</span>
+    </div>
+    <div class="card-grid">
+
+      <div class="card early">
+        <span class="card-icon">🫧</span>
+        <div class="card-name">Tumefacción de partes blandas</div>
+        <span class="card-tag">Primer signo visible</span>
+        <p class="card-desc">Aumento de densidad fusiforme y simétrico periarticular secundario a sinovitis activa y edema. Clásico en MCF e IFP bilateralmente.</p>
+        <div class="card-highlight hl-blue">Signo: engrosamiento fusiforme periarticular</div>
+      </div>
+
+      <div class="card early">
+        <span class="card-icon">💎</span>
+        <div class="card-name">Osteopenia periarticular</div>
+        <span class="card-tag">Desmineralización yuxtaarticular</span>
+        <p class="card-desc">Radiolucencia aumentada en hueso subcondral adyacente a la articulación. Causada por hiperemia sinovial. Distingue AR de artrosis desde etapas tempranas.</p>
+        <div class="card-highlight hl-blue">Clave diferencial vs. artrosis (que no la presenta)</div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+
+<!-- PHASE 2: INTERMEDIOS -->
+<div class="timeline" style="max-width:960px;margin:0 auto 48px;">
+  <div class="phase">
+    <div class="phase-header">
+      <span class="phase-badge badge-mid">Fase II — Hallazgos Intermedios</span>
+    </div>
+    <div class="card-grid">
+
+      <div class="card mid">
+        <span class="card-icon">🔩</span>
+        <div class="card-name">Erosiones marginales</div>
+        <span class="card-tag">Hallazgo patognomónico</span>
+        <p class="card-desc">Defectos corticales en las <em>"bare areas"</em> — zonas no protegidas por cartílago donde el pannus ataca el hueso directamente. Pequeñas muescas o mordeduras corticales.</p>
+        <div class="card-highlight hl-orange">
+          Sitios clásicos: cabezas MCF 2°–3°, estiloides cubital, cabeza radial, pisiforme
+        </div>
+      </div>
+
+      <div class="card mid">
+        <span class="card-icon">📏</span>
+        <div class="card-name">Estrechamiento del espacio articular</div>
+        <span class="card-tag">Por destrucción de cartílago</span>
+        <p class="card-desc">El pannus destruye el cartílago hialino progresivamente. El estrechamiento es <strong>concéntrico y simétrico</strong> — clave diferencial con artrosis (focal y asimétrica).</p>
+        <div class="card-highlight hl-orange">Patrón concéntrico ≠ artrosis (focal/asimétrico)</div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+
+<!-- PHASE 3: TARDÍOS -->
+<div class="timeline" style="max-width:960px;margin:0 auto 48px;">
+  <div class="phase">
+    <div class="phase-header">
+      <span class="phase-badge badge-late">Fase III — Hallazgos Tardíos</span>
+    </div>
+    <div class="card-grid">
+
+      <div class="card late">
+        <span class="card-icon">↙️</span>
+        <div class="card-name">Desviación cubital</div>
+        <span class="card-tag">Deformidad característica en MCF</span>
+        <p class="card-desc">Subluxación volar de tendones extensores con desplazamiento ulnar de los dedos en las MCF. Uno de los signos morfológicos más reconocibles de AR avanzada.</p>
+        <div class="card-highlight hl-red">Signo visual clásico en proyección PA de manos</div>
+      </div>
+
+      <div class="card late">
+        <span class="card-icon">🔀</span>
+        <div class="card-name">Subluxaciones y luxaciones</div>
+        <span class="card-tag">Destrucción ligamentaria</span>
+        <p class="card-desc">Subluxación volar de MCF, migración proximal del carpo, destrucción radio-cubital distal (escalón en bayoneta). La destrucción capsular y ligamentaria permite estas deformidades.</p>
+        <div class="card-highlight hl-red">Escalón en bayoneta: signo de destrucción radio-cubital distal</div>
+      </div>
+
+      <div class="card late">
+        <span class="card-icon">🦢</span>
+        <div class="card-name">Deformidad en cuello de cisne</div>
+        <span class="card-tag">IFP + IFD · proyección lateral</span>
+        <p class="card-desc">Hiperextensión de IFP con flexión de IFD. Visible en proyección lateral de los dedos. Consecuencia del desequilibrio tendinoso producido por sinovitis crónica.</p>
+        <div class="card-highlight hl-red">Opuesto: Boutonnière = flexión IFP + hiperextensión IFD</div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+
+<!-- DIAGRAM SVG: DISTRIBUCIÓN ARTICULAR -->
+<div class="diagram-wrapper" style="max-width:960px;margin:0 auto 48px;">
+  <div class="diagram-title">Distribución articular · Mano y muñeca</div>
+
+  <svg class="hand-diagram" viewBox="0 0 720 380" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <radialGradient id="g_hot" cx="50%" cy="50%" r="50%">
+        <stop offset="0%" stop-color="#ef6c6c" stop-opacity="0.8"/>
+        <stop offset="100%" stop-color="#ef6c6c" stop-opacity="0.1"/>
+      </radialGradient>
+      <radialGradient id="g_warm" cx="50%" cy="50%" r="50%">
+        <stop offset="0%" stop-color="#ffb74d" stop-opacity="0.7"/>
+        <stop offset="100%" stop-color="#ffb74d" stop-opacity="0.1"/>
+      </radialGradient>
+      <radialGradient id="g_cool" cx="50%" cy="50%" r="50%">
+        <stop offset="0%" stop-color="#4fc3f7" stop-opacity="0.5"/>
+        <stop offset="100%" stop-color="#4fc3f7" stop-opacity="0.05"/>
+      </radialGradient>
+      <radialGradient id="g_green" cx="50%" cy="50%" r="50%">
+        <stop offset="0%" stop-color="#81c784" stop-opacity="0.5"/>
+        <stop offset="100%" stop-color="#81c784" stop-opacity="0.05"/>
+      </radialGradient>
+    </defs>
+
+    <!-- Background grid subtle -->
+    <rect width="720" height="380" fill="#161b25" rx="4"/>
+
+    <!-- ── WRIST block ── -->
+    <rect x="230" y="290" width="140" height="48" rx="6" fill="#1e2535" stroke="#2a3347" stroke-width="1.2"/>
+    <circle cx="300" cy="314" r="18" fill="url(#g_hot)" opacity="0.9"/>
+    <text x="300" y="319" text-anchor="middle" font-family="Inter" font-size="10" fill="#ef6c6c" font-weight="600">MUÑECA</text>
+    <text x="300" y="330" text-anchor="middle" font-family="Inter" font-size="8" fill="#7a8ba8">Muy frecuente</text>
+
+    <!-- ── METACARPALS + MCF ── -->
+    <!-- Metacarpal bones -->
+    <rect x="176" y="220" width="22" height="60" rx="4" fill="#1e2535" stroke="#2a3347" stroke-width="1"/>
+    <rect x="208" y="215" width="22" height="65" rx="4" fill="#1e2535" stroke="#2a3347" stroke-width="1"/>
+    <rect x="240" y="218" width="22" height="62" rx="4" fill="#1e2535" stroke="#2a3347" stroke-width="1"/>
+    <rect x="272" y="222" width="22" height="58" rx="4" fill="#1e2535" stroke="#2a3347" stroke-width="1"/>
+    <rect x="304" y="230" width="22" height="50" rx="4" fill="#1e2535" stroke="#2a3347" stroke-width="1"/>
+
+    <!-- MCF joints (hot) -->
+    <ellipse cx="187" cy="220" rx="13" ry="8" fill="url(#g_hot)"/>
+    <ellipse cx="219" cy="215" rx="13" ry="8" fill="url(#g_hot)"/>
+    <ellipse cx="251" cy="218" rx="13" ry="8" fill="url(#g_hot)"/>
+    <ellipse cx="283" cy="222" rx="13" ry="8" fill="url(#g_hot)"/>
+    <ellipse cx="315" cy="230" rx="13" ry="8" fill="url(#g_warm)"/>
+
+    <!-- MCF label -->
+    <line x1="340" y1="218" x2="380" y2="200" stroke="#ef6c6c" stroke-width="0.8" stroke-dasharray="3,2"/>
+    <text x="384" y="197" font-family="JetBrains Mono" font-size="9" fill="#ef6c6c" letter-spacing="1">MCF</text>
+    <text x="384" y="209" font-family="Inter" font-size="8" fill="#7a8ba8">Muy frecuente</text>
+    <text x="384" y="220" font-family="Inter" font-size="8" fill="#7a8ba8">2°–3° prioritarios</text>
+
+    <!-- ── PHALANGES proximal ── -->
+    <rect x="179" y="165" width="16" height="48" rx="3" fill="#1e2535" stroke="#2a3347" stroke-width="1"/>
+    <rect x="211" y="158" width="16" height="50" rx="3" fill="#1e2535" stroke="#2a3347" stroke-width="1"/>
+    <rect x="243" y="162" width="16" height="49" rx="3" fill="#1e2535" stroke="#2a3347" stroke-width="1"/>
+    <rect x="275" y="167" width="16" height="48" rx="3" fill="#1e2535" stroke="#2a3347" stroke-width="1"/>
+    <rect x="307" y="176" width="16" height="47" rx="3" fill="#1e2535" stroke="#2a3347" stroke-width="1"/>
+
+    <!-- IFP joints (warm) -->
+    <ellipse cx="187" cy="165" rx="11" ry="7" fill="url(#g_warm)"/>
+    <ellipse cx="219" cy="158" rx="11" ry="7" fill="url(#g_warm)"/>
+    <ellipse cx="251" cy="162" rx="11" ry="7" fill="url(#g_warm)"/>
+    <ellipse cx="283" cy="167" rx="11" ry="7" fill="url(#g_warm)"/>
+    <ellipse cx="315" cy="176" rx="11" ry="7" fill="url(#g_warm)"/>
+
+    <!-- IFP label -->
+    <line x1="340" y1="162" x2="380" y2="145" stroke="#ffb74d" stroke-width="0.8" stroke-dasharray="3,2"/>
+    <text x="384" y="142" font-family="JetBrains Mono" font-size="9" fill="#ffb74d" letter-spacing="1">IFP</text>
+    <text x="384" y="154" font-family="Inter" font-size="8" fill="#7a8ba8">Frecuente</text>
+
+    <!-- ── PHALANGES middle ── -->
+    <rect x="181" y="120" width="14" height="38" rx="3" fill="#1e2535" stroke="#2a3347" stroke-width="1"/>
+    <rect x="213" y="113" width="14" height="38" rx="3" fill="#1e2535" stroke="#2a3347" stroke-width="1"/>
+    <rect x="245" y="117" width="14" height="38" rx="3" fill="#1e2535" stroke="#2a3347" stroke-width="1"/>
+    <rect x="277" y="122" width="14" height="38" rx="3" fill="#1e2535" stroke="#2a3347" stroke-width="1"/>
+    <rect x="309" y="132" width="14" height="37" rx="3" fill="#1e2535" stroke="#2a3347" stroke-width="1"/>
+
+    <!-- IFD joints (cool = spared) -->
+    <ellipse cx="188" cy="120" rx="10" ry="6" fill="url(#g_cool)" opacity="0.4"/>
+    <ellipse cx="220" cy="113" rx="10" ry="6" fill="url(#g_cool)" opacity="0.4"/>
+    <ellipse cx="252" cy="117" rx="10" ry="6" fill="url(#g_cool)" opacity="0.4"/>
+    <ellipse cx="284" cy="122" rx="10" ry="6" fill="url(#g_cool)" opacity="0.4"/>
+    <ellipse cx="316" cy="132" rx="10" ry="6" fill="url(#g_cool)" opacity="0.4"/>
+
+    <!-- IFD label -->
+    <line x1="330" y1="115" x2="380" y2="100" stroke="#4fc3f7" stroke-width="0.8" stroke-dasharray="3,2"/>
+    <text x="384" y="97" font-family="JetBrains Mono" font-size="9" fill="#4fc3f7" letter-spacing="1">IFD</text>
+    <text x="384" y="109" font-family="Inter" font-size="8" fill="#7a8ba8">Respetadas ✓</text>
+    <text x="384" y="120" font-family="Inter" font-size="8" fill="#4fc3f7">Diferencial vs artrosis</text>
+
+    <!-- ── DISTAL phalanges ── -->
+    <path d="M184 85 Q188 72 192 85 Z" fill="#1e2535" stroke="#2a3347" stroke-width="1"/>
+    <path d="M216 78 Q220 65 224 78 Z" fill="#1e2535" stroke="#2a3347" stroke-width="1"/>
+    <path d="M248 82 Q252 69 256 82 Z" fill="#1e2535" stroke="#2a3347" stroke-width="1"/>
+    <path d="M280 87 Q284 74 288 87 Z" fill="#1e2535" stroke="#2a3347" stroke-width="1"/>
+    <path d="M312 97 Q316 84 320 97 Z" fill="#1e2535" stroke="#2a3347" stroke-width="1"/>
+
+    <!-- ── THUMB ── -->
+    <rect x="120" y="245" width="40" height="30" rx="5" fill="#1e2535" stroke="#2a3347" stroke-width="1"/>
+    <rect x="128" y="200" width="24" height="40" rx="4" fill="#1e2535" stroke="#2a3347" stroke-width="1"/>
+    <rect x="131" y="162" width="18" height="34" rx="4" fill="#1e2535" stroke="#2a3347" stroke-width="1"/>
+    <ellipse cx="140" cy="245" rx="12" ry="7" fill="url(#g_warm)"/>
+    <ellipse cx="140" cy="200" rx="10" ry="6" fill="url(#g_warm)"/>
+
+    <!-- Left side labels -->
+    <line x1="108" y1="245" x2="68" y2="230" stroke="#ffb74d" stroke-width="0.8" stroke-dasharray="3,2"/>
+    <text x="18" y="227" font-family="JetBrains Mono" font-size="9" fill="#ffb74d" letter-spacing="1">PULGAR</text>
+    <text x="18" y="239" font-family="Inter" font-size="8" fill="#7a8ba8">MCF + IF</text>
+
+    <!-- Wrist label left -->
+    <line x1="228" y1="314" x2="168" y2="330" stroke="#ef6c6c" stroke-width="0.8" stroke-dasharray="3,2"/>
+    <text x="18" y="327" font-family="JetBrains Mono" font-size="9" fill="#ef6c6c" letter-spacing="1">ESTILOIDES</text>
+    <text x="18" y="339" font-family="Inter" font-size="8" fill="#ef6c6c">cubital · erosión clásica</text>
+
+    <!-- ── LEGEND ── -->
+    <rect x="490" y="60" width="210" height="180" rx="6" fill="#0e1117" stroke="#2a3347" stroke-width="1"/>
+    <text x="510" y="84" font-family="JetBrains Mono" font-size="9" fill="#7a8ba8" letter-spacing="1.5">LEYENDA</text>
+
+    <circle cx="515" cy="106" r="7" fill="url(#g_hot)"/>
+    <text x="528" y="110" font-family="Inter" font-size="11" fill="#e8edf5">Muy frecuente</text>
+
+    <circle cx="515" cy="130" r="7" fill="url(#g_warm)"/>
+    <text x="528" y="134" font-family="Inter" font-size="11" fill="#e8edf5">Frecuente</text>
+
+    <circle cx="515" cy="154" r="7" fill="url(#g_cool)" opacity="0.5"/>
+    <text x="528" y="158" font-family="Inter" font-size="11" fill="#e8edf5">Respetado (AR)</text>
+
+    <line x1="505" y1="182" x2="685" y2="182" stroke="#2a3347" stroke-width="0.8"/>
+    <text x="510" y="202" font-family="Inter" font-size="10" fill="#7a8ba8">Bilateral y simétrico</text>
+    <text x="510" y="218" font-family="Inter" font-size="10" fill="#7a8ba8">Predominio MCF + Muñeca</text>
+    <text x="510" y="234" font-family="Inter" font-size="10" fill="#4fc3f7">IFD respetadas ← diferencial</text>
+  </svg>
+</div>
+
+
+<!-- KEY RULE -->
+<div class="key-rule">
+  <div class="icon">🔑</div>
+  <div class="content">
+    <strong>Regla diagnóstica cardinal</strong>
+    <p>Distribución <strong>simétrica y bilateral</strong>, con afectación de <strong>MCF e IFP</strong> y <strong>respeto de las IFD</strong>. Este patrón es el opuesto al de la artrosis (que afecta IFD y IFP pero respeta MCF). Las erosiones marginales en "bare areas" son el hallazgo patognomónico. La radiografía detecta cambios estructurales; para sinovitis temprana y erosiones precoces se complementa con <strong>ecografía</strong> (power Doppler) y <strong>RM</strong>.</p>
+  </div>
+</div>
+
+
+<!-- LARSEN TABLE -->
+<div class="table-section">
+  <div class="section-label">Estadificación de Larsen</div>
+  <table class="larsen-table">
+    <thead>
+      <tr>
+        <th>Grado</th>
+        <th>Denominación</th>
+        <th>Hallazgos principales</th>
+        <th>Progresión</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="grade-chip g0">0</span></td>
+        <td style="color:#e8edf5;font-weight:500">Normal</td>
+        <td>Sin alteraciones radiográficas</td>
+        <td><div class="bar-track"><div class="bar-fill" style="width:2%;background:#4fc3f7"></div></div></td>
+      </tr>
+      <tr>
+        <td><span class="grade-chip g1">I</span></td>
+        <td style="color:#81c784;font-weight:500">Leve</td>
+        <td>Tumefacción de partes blandas · osteopenia periarticular</td>
+        <td><div class="bar-track"><div class="bar-fill" style="width:20%;background:#81c784"></div></div></td>
+      </tr>
+      <tr>
+        <td><span class="grade-chip g2">II</span></td>
+        <td style="color:#ffb74d;font-weight:500">Moderado inicial</td>
+        <td>Erosiones marginales iniciales · leve estrechamiento articular</td>
+        <td><div class="bar-track"><div class="bar-fill" style="width:40%;background:#ffb74d"></div></div></td>
+      </tr>
+      <tr>
+        <td><span class="grade-chip g3">III</span></td>
+        <td style="color:#ffb74d;font-weight:500">Moderado avanzado</td>
+        <td>Erosiones moderadas · estrechamiento articular marcado</td>
+        <td><div class="bar-track"><div class="bar-fill" style="width:60%;background:#ffb74d"></div></div></td>
+      </tr>
+      <tr>
+        <td><span class="grade-chip g4">IV</span></td>
+        <td style="color:#ef6c6c;font-weight:500">Grave</td>
+        <td>Erosiones graves · subluxación articular</td>
+        <td><div class="bar-track"><div class="bar-fill" style="width:80%;background:#ef6c6c"></div></div></td>
+      </tr>
+      <tr>
+        <td><span class="grade-chip g5">V</span></td>
+        <td style="color:#ef6c6c;font-weight:500">Mutilante</td>
+        <td>Luxación completa · destrucción articular total · artritis mutilans</td>
+        <td><div class="bar-track"><div class="bar-fill" style="width:100%;background:#ef6c6c"></div></div></td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+
+<!-- AR vs OA COMPARISON -->
+<div class="section-label" style="max-width:960px;margin:0 auto 16px;">Diagnóstico diferencial · AR vs Artrosis</div>
+<div class="compare-grid">
+
+  <div class="compare-card">
+    <div class="compare-header ar">🔴 Artritis Reumatoide</div>
+    <div class="compare-body">
+      <div class="compare-row">Distribución simétrica y bilateral</div>
+      <div class="compare-row">Afecta MCF e IFP · respeta IFD</div>
+      <div class="compare-row">Estrechamiento articular concéntrico</div>
+      <div class="compare-row">Osteopenia periarticular presente</div>
+      <div class="compare-row">Erosiones marginales en bare areas</div>
+      <div class="compare-row">Sin osteofitos</div>
+      <div class="compare-row">Subluxación y desviación cubital</div>
+    </div>
+  </div>
+
+  <div class="compare-card">
+    <div class="compare-header oa">🔵 Artrosis (OA)</div>
+    <div class="compare-body">
+      <div class="compare-row">Distribución asimétrica</div>
+      <div class="compare-row">Afecta IFD e IFP · respeta MCF</div>
+      <div class="compare-row">Estrechamiento articular focal/asimétrico</div>
+      <div class="compare-row">Sin osteopenia periarticular</div>
+      <div class="compare-row">Sin erosiones marginales (salvo variante erosiva)</div>
+      <div class="compare-row">Osteofitos prominentes</div>
+      <div class="compare-row">Esclerosis subcondral · geodas</div>
+    </div>
+  </div>
+
+</div>
+
+
+<!-- FOOTER -->
+<div class="footer">
+  <p>Artritis Reumatoide · Radiología MSK · Esquema de referencia clínica</p>
+</div>
+
+</body>
+</html>`},
+  {title:"Semiologia Radiologica de Tumores Oseos", topic:"msk", date:"2026-07-06", html: `<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Semiología Radiológica de Tumores Óseos</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&display=swap');
+
+  :root{
+    --void:#0a0c0f;
+    --panel:#12161b;
+    --panel-raised:#171c22;
+    --panel-hi:#1d232b;
+    --line:#232a33;
+    --line-soft:#1a2028;
+    --text:#e8edf2;
+    --text-dim:#94a3b0;
+    --text-faint:#5c6874;
+    --cyan:#42d7e8;
+    --cyan-dim:#1d525a;
+    --malign:#ef5a5a;
+    --malign-dim:#3a1f22;
+    --benign:#4fca8c;
+    --benign-dim:#1c352a;
+    --amber:#f0b656;
+    --amber-dim:#3a2f18;
+  }
+
+  *{box-sizing:border-box; margin:0; padding:0;}
+
+  body{
+    background:
+      radial-gradient(ellipse 900px 500px at 15% -5%, rgba(66,215,232,0.06), transparent 60%),
+      radial-gradient(ellipse 700px 500px at 100% 10%, rgba(239,90,90,0.05), transparent 55%),
+      var(--void);
+    color:var(--text);
+    font-family:'Inter', system-ui, sans-serif;
+    line-height:1.5;
+    padding-bottom:80px;
+    min-height:100vh;
+  }
+
+  /* ---- scan-line texture overlay ---- */
+  body::before{
+    content:"";
+    position:fixed; inset:0;
+    background-image:repeating-linear-gradient(0deg, rgba(255,255,255,0.012) 0px, rgba(255,255,255,0.012) 1px, transparent 1px, transparent 3px);
+    pointer-events:none;
+    z-index:999;
+  }
+
+  .mono{font-family:'IBM Plex Mono', monospace;}
+
+  /* ================= HEADER ================= */
+  header{
+    padding:28px 20px 20px;
+    border-bottom:1px solid var(--line);
+    position:relative;
+  }
+  .eyebrow{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:11px;
+    letter-spacing:0.18em;
+    color:var(--cyan);
+    text-transform:uppercase;
+    display:flex;
+    align-items:center;
+    gap:8px;
+    margin-bottom:10px;
+  }
+  .eyebrow::before{
+    content:"";
+    width:7px; height:7px;
+    background:var(--cyan);
+    border-radius:50%;
+    box-shadow:0 0 8px var(--cyan);
+    animation:pulse 2.4s ease-in-out infinite;
+  }
+  @keyframes pulse{
+    0%,100%{opacity:1;}
+    50%{opacity:0.35;}
+  }
+  h1{
+    font-family:'Space Grotesk', sans-serif;
+    font-size:clamp(26px, 7vw, 38px);
+    font-weight:700;
+    letter-spacing:-0.01em;
+    line-height:1.08;
+  }
+  h1 span{color:var(--text-dim); font-weight:500;}
+  .subtitle{
+    margin-top:8px;
+    color:var(--text-dim);
+    font-size:14px;
+    max-width:560px;
+  }
+  .source-tag{
+    margin-top:14px;
+    font-family:'IBM Plex Mono', monospace;
+    font-size:10.5px;
+    color:var(--text-faint);
+    letter-spacing:0.02em;
+  }
+
+  /* ================= INTRO: dos grupos ================= */
+  .intro{
+    padding:22px 20px;
+    border-bottom:1px solid var(--line);
+  }
+  .intro-label{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:11px;
+    color:var(--text-faint);
+    letter-spacing:0.1em;
+    text-transform:uppercase;
+    margin-bottom:12px;
+  }
+  .duo{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:10px;
+  }
+  .duo-card{
+    border-radius:10px;
+    padding:14px 12px;
+    border:1px solid var(--line);
+    position:relative;
+    overflow:hidden;
+  }
+  .duo-card.agresivo{
+    background:linear-gradient(160deg, var(--malign-dim), var(--panel));
+    border-color:#4a2528;
+  }
+  .duo-card.no-agresivo{
+    background:linear-gradient(160deg, var(--benign-dim), var(--panel));
+    border-color:#254234;
+  }
+  .duo-card h3{
+    font-family:'Space Grotesk', sans-serif;
+    font-size:15px;
+    margin-bottom:6px;
+  }
+  .duo-card.agresivo h3{color:var(--malign);}
+  .duo-card.no-agresivo h3{color:var(--benign);}
+  .duo-card p{font-size:12px; color:var(--text-dim); margin-bottom:2px;}
+  .duo-card .example{
+    margin-top:8px;
+    font-family:'IBM Plex Mono', monospace;
+    font-size:10.5px;
+    padding:3px 8px;
+    display:inline-block;
+    border-radius:20px;
+    background:rgba(255,255,255,0.05);
+  }
+  .growth-svg{width:100%; height:auto; margin-top:8px;}
+
+  /* ================= TAB NAV ================= */
+  nav.steps{
+    position:sticky;
+    top:0;
+    z-index:100;
+    background:rgba(10,12,15,0.92);
+    backdrop-filter:blur(8px);
+    border-bottom:1px solid var(--line);
+    overflow-x:auto;
+    white-space:nowrap;
+    padding:10px 14px;
+    display:flex;
+    gap:6px;
+    scrollbar-width:none;
+  }
+  nav.steps::-webkit-scrollbar{display:none;}
+  .step-btn{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:11.5px;
+    color:var(--text-dim);
+    background:var(--panel-raised);
+    border:1px solid var(--line);
+    border-radius:7px;
+    padding:8px 12px;
+    cursor:pointer;
+    display:inline-flex;
+    align-items:center;
+    gap:6px;
+    transition:all .15s ease;
+    flex-shrink:0;
+  }
+  .step-btn .num{
+    color:var(--text-faint);
+    font-size:10px;
+  }
+  .step-btn.active{
+    background:var(--panel-hi);
+    border-color:var(--cyan-dim);
+    color:var(--cyan);
+    box-shadow:0 0 0 1px var(--cyan-dim), 0 0 14px rgba(66,215,232,0.15);
+  }
+  .step-btn.active .num{color:var(--cyan);}
+
+  /* ================= MAIN PANEL ================= */
+  main{padding:20px;}
+  .panel{display:none; animation:fadeIn .3s ease;}
+  .panel.active{display:block;}
+  @keyframes fadeIn{from{opacity:0; transform:translateY(6px);} to{opacity:1; transform:translateY(0);}}
+
+  .panel-head{
+    display:flex;
+    align-items:baseline;
+    gap:10px;
+    margin-bottom:4px;
+  }
+  .panel-num{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:13px;
+    color:var(--cyan);
+    border:1px solid var(--cyan-dim);
+    border-radius:5px;
+    padding:2px 7px;
+  }
+  .panel-title{
+    font-family:'Space Grotesk', sans-serif;
+    font-size:22px;
+    font-weight:700;
+  }
+  .panel-sub{
+    color:var(--text-dim);
+    font-size:13px;
+    margin:6px 0 18px;
+    max-width:520px;
+  }
+
+  .card{
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:12px;
+    padding:16px;
+    margin-bottom:14px;
+  }
+  .card h4{
+    font-family:'Space Grotesk', sans-serif;
+    font-size:14px;
+    margin-bottom:10px;
+    color:var(--text);
+    display:flex;
+    align-items:center;
+    gap:8px;
+  }
+  .swatch{width:9px; height:9px; border-radius:2px; flex-shrink:0;}
+
+  /* generic diagram frame */
+  .diagram{
+    background:var(--panel-raised);
+    border:1px solid var(--line-soft);
+    border-radius:10px;
+    padding:10px;
+    margin:10px 0;
+  }
+  .diagram svg{width:100%; height:auto; display:block;}
+  .cap{font-size:11px; color:var(--text-faint); margin-top:8px; text-align:center;}
+
+  /* two-col grid */
+  .grid2{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
+  @media(max-width:520px){.grid2{grid-template-columns:1fr;}}
+
+  /* location grid buttons style badges */
+  .badge{
+    display:inline-block;
+    font-family:'IBM Plex Mono', monospace;
+    font-size:10.5px;
+    padding:3px 9px;
+    border-radius:20px;
+    border:1px solid var(--line);
+    color:var(--text-dim);
+    margin:2px 4px 2px 0;
+  }
+  .badge.b-central{border-color:var(--cyan-dim); color:var(--cyan);}
+  .badge.b-malign{border-color:#5a2a2d; color:var(--malign); background:var(--malign-dim);}
+  .badge.b-benign{border-color:#254234; color:var(--benign); background:var(--benign-dim);}
+
+  /* table */
+  table{width:100%; border-collapse:collapse; font-size:12.5px;}
+  th{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:10px;
+    text-transform:uppercase;
+    letter-spacing:0.06em;
+    color:var(--void);
+    background:var(--cyan);
+    padding:8px 8px;
+    text-align:left;
+  }
+  th:first-child{border-radius:6px 0 0 0;}
+  th:last-child{border-radius:0 6px 0 0;}
+  td{
+    padding:9px 8px;
+    border-bottom:1px solid var(--line-soft);
+    color:var(--text-dim);
+    vertical-align:top;
+  }
+  tr:last-child td{border-bottom:none;}
+  td.hl{color:var(--text); font-weight:600;}
+  td b{color:var(--text);}
+
+  /* severity ladder (periosteal reaction) */
+  .ladder{
+    display:grid;
+    grid-template-columns:repeat(4, 1fr);
+    gap:8px;
+    margin-top:10px;
+  }
+  @media(max-width:480px){.ladder{grid-template-columns:repeat(2,1fr);}}
+  .ladder-step{
+    background:var(--panel-raised);
+    border:1px solid var(--line-soft);
+    border-radius:8px;
+    padding:8px;
+    text-align:center;
+  }
+  .ladder-step svg{width:100%; height:70px;}
+  .ladder-step .name{
+    font-size:11px;
+    font-weight:600;
+    margin-top:4px;
+  }
+  .ladder-step .desc{font-size:9.5px; color:var(--text-faint); margin-top:2px;}
+  .ladder-bar{
+    height:5px;
+    border-radius:3px;
+    margin-top:10px;
+    background:linear-gradient(90deg, var(--benign), var(--amber), var(--malign));
+  }
+  .ladder-labels{display:flex; justify-content:space-between; font-size:10px; color:var(--text-faint); margin-top:4px; font-family:'IBM Plex Mono', monospace;}
+
+  /* destruction pattern cards */
+  .pattern-row{display:grid; grid-template-columns:repeat(3,1fr); gap:8px;}
+  @media(max-width:600px){.pattern-row{grid-template-columns:1fr;}}
+  .pattern-card{
+    background:var(--panel-raised);
+    border:1px solid var(--line-soft);
+    border-radius:10px;
+    padding:10px;
+  }
+  .pattern-card svg{width:100%; height:100px;}
+  .pattern-card .ptitle{font-weight:600; font-size:12.5px; margin-top:6px;}
+  .pattern-card .plevel{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:9.5px;
+    display:inline-block;
+    margin-top:4px;
+    padding:2px 7px;
+    border-radius:20px;
+  }
+  .lvl-low{background:var(--benign-dim); color:var(--benign);}
+  .lvl-mid{background:var(--amber-dim); color:var(--amber);}
+  .lvl-high{background:var(--malign-dim); color:var(--malign);}
+  .pattern-card .pex{font-size:10.5px; color:var(--text-faint); margin-top:6px;}
+
+  /* mnemonic box */
+  .mnemonic{
+    border:1px dashed var(--cyan-dim);
+    border-radius:10px;
+    padding:14px;
+    background:rgba(66,215,232,0.04);
+  }
+  .mnemonic .mtitle{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:10.5px;
+    color:var(--cyan);
+    letter-spacing:0.08em;
+    text-transform:uppercase;
+    margin-bottom:8px;
+  }
+  .mchip-row{display:flex; flex-wrap:wrap; gap:6px;}
+  .mchip{
+    background:var(--panel-hi);
+    border:1px solid var(--line);
+    border-radius:7px;
+    padding:5px 8px;
+    font-size:11.5px;
+  }
+  .mchip b{color:var(--cyan); font-family:'IBM Plex Mono', monospace;}
+
+  /* footer note */
+  footer{
+    padding:24px 20px 10px;
+    text-align:center;
+    color:var(--text-faint);
+    font-size:11px;
+    font-family:'IBM Plex Mono', monospace;
+  }
+
+  ::selection{background:var(--cyan-dim); color:var(--text);}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="eyebrow">Imagenología MSK · Lectura activa</div>
+  <h1>Semiología radiológica <span>de tumores óseos</span></h1>
+  <p class="subtitle">Los 7 pasos sistemáticos para describir cualquier lesión ósea en radiografía simple, antes de plantear un diagnóstico diferencial histológico.</p>
+  <div class="source-tag mono">FUENTE · Sesión 15, Imagenología Musculoesquelética · Kang HS, Oncologic Imaging: Bone Tumors, Springer 2017 · Plant J, EOR 2016</div>
+</header>
+
+<section class="intro">
+  <div class="intro-label mono">Punto de partida</div>
+  <div class="duo">
+    <div class="duo-card agresivo">
+      <h3>Agresivo</h3>
+      <p>Crecimiento rápido</p>
+      <p>Bordes mal definidos</p>
+      <p>Reacción perióstica expansiva</p>
+      <p>± invade tejidos blandos</p>
+      <div class="example mono" style="color:var(--malign); border:1px solid #4a2528;">Ej. Osteosarcoma</div>
+      <svg class="growth-svg" viewBox="0 0 260 90">
+        <rect x="10" y="0" width="14" height="90" fill="#3a4450"/>
+        <rect x="236" y="0" width="14" height="90" fill="#3a4450"/>
+        <path d="M24 10 C 90 5, 60 85, 24 80 Z" fill="#ef5a5a" opacity="0.75"/>
+        <path d="M24 10 C 90 5, 60 85, 24 80 Z" fill="none" stroke="#ef5a5a" stroke-width="1.5" stroke-dasharray="2 2"/>
+      </svg>
+    </div>
+    <div class="duo-card no-agresivo">
+      <h3>No agresivo</h3>
+      <p>Crecimiento lento</p>
+      <p>Bordes bien definidos</p>
+      <p>Sin reacción perióstica activa</p>
+      <p>Sin involucro de tejidos blandos</p>
+      <div class="example mono" style="color:var(--benign); border:1px solid #254234;">Ej. Quiste óseo unicameral</div>
+      <svg class="growth-svg" viewBox="0 0 260 90">
+        <rect x="10" y="0" width="14" height="90" fill="#3a4450"/>
+        <rect x="236" y="0" width="14" height="90" fill="#3a4450"/>
+        <ellipse cx="130" cy="45" rx="70" ry="30" fill="#4fca8c" opacity="0.6"/>
+        <ellipse cx="130" cy="45" rx="70" ry="30" fill="none" stroke="#4fca8c" stroke-width="1.5"/>
+      </svg>
+    </div>
+  </div>
+</section>
+
+<nav class="steps" id="stepNav"></nav>
+
+<main id="mainContent"></main>
+
+<footer>
+  Uso académico · Radiología diagnóstica · Elaborado a partir de material de residencia
+</footer>
+
+<script>
+const steps = [
+  {
+    key:"localizacion",
+    label:"Localización",
+    title:"1 · Localización",
+    sub:"¿En qué hueso y en qué región anatómica está la lesión? Se describe en dos planos.",
+    render: () => \`
+      <div class="card">
+        <h4><span class="swatch" style="background:var(--cyan)"></span>Plano transverso</h4>
+        <div class="grid2">
+          <div class="diagram">
+            \${svgTransverse('Central', 'central')}
+            <div class="cap">Central — ej. quiste óseo simple</div>
+          </div>
+          <div class="diagram">
+            \${svgTransverse('Excéntrica', 'excentrica')}
+            <div class="cap">Excéntrica — ej. condroblastoma</div>
+          </div>
+          <div class="diagram">
+            \${svgTransverse('Cortical', 'cortical')}
+            <div class="cap">Cortical — ej. fibroma no osificante</div>
+          </div>
+          <div class="diagram">
+            \${svgTransverse('Yuxtacortical', 'yuxtacortical')}
+            <div class="cap">Yuxtacortical — ej. osteosarcoma parostal</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h4><span class="swatch" style="background:var(--amber)"></span>Plano longitudinal</h4>
+        <div class="diagram">
+          \${svgLongBone()}
+        </div>
+        <table style="margin-top:6px;">
+          <tr><th>Región</th><th>Lesiones típicas</th></tr>
+          <tr><td class="hl">Epífisis</td><td>Condroblastoma · Encondroma articular · TCG (adultos)</td></tr>
+          <tr><td class="hl">Metáfisis</td><td>Osteosarcoma · Osteocondroma · Encondroma · Quiste óseo/osteoblastoma · TCG (niños)</td></tr>
+          <tr><td class="hl">Diáfisis</td><td>Tumores de células redondas (Ewing, mieloma) · Displasia fibrosa · Fibrosarcoma · Osteoma osteoide</td></tr>
+        </table>
+        <p class="cap" style="margin-top:10px;">Regla práctica: TCG en <b style="color:var(--text)">niños → metáfisis</b>, en <b style="color:var(--text)">adultos → epífisis</b> (tras el cierre fisario).</p>
+      </div>
+    \`
+  },
+  {
+    key:"zona",
+    label:"Zona de transición",
+    title:"2 · Zona de transición (ZT)",
+    sub:"El límite entre el hueso trabecular sano y el tumor. Es el mejor predictor único de velocidad de crecimiento.",
+    render: () => \`
+      <div class="card">
+        <div class="diagram">\${svgTransitionZone()}</div>
+      </div>
+      <div class="grid2">
+        <div class="card" style="border-color:#254234;">
+          <h4><span class="swatch" style="background:var(--benign)"></span>ZT estrecha</h4>
+          <p style="font-size:12.5px; color:var(--text-dim);">Bordes escleróticos, bien definidos → hueso con tiempo de "reaccionar" al tumor.</p>
+          <p style="font-size:12px; margin-top:8px;"><b style="color:var(--benign)">Usualmente benigna</b></p>
+          <p class="cap" style="text-align:left; margin-top:8px;">Excepto: &gt;40 años (METS, mieloma) · todas las edades (infección)</p>
+        </div>
+        <div class="card" style="border-color:#4a2528;">
+          <h4><span class="swatch" style="background:var(--malign)"></span>ZT amplia</h4>
+          <p style="font-size:12.5px; color:var(--text-dim);">Bordes mal definidos → el hueso no alcanza a delimitar el crecimiento tumoral.</p>
+          <p style="font-size:12px; margin-top:8px;"><b style="color:var(--malign)">Usualmente agresiva / maligna</b></p>
+          <p class="cap" style="text-align:left; margin-top:8px;">Excepto: niños (granuloma eosinófilo) · todas las edades (infección)</p>
+        </div>
+      </div>
+    \`
+  },
+  {
+    key:"periostica",
+    label:"Reacción perióstica",
+    title:"3 · Reacción perióstica",
+    sub:"Cómo responde el periostio al crecimiento tumoral. Refleja directamente la velocidad de crecimiento.",
+    render: () => \`
+      <div class="card">
+        <div class="ladder">
+          <div class="ladder-step">\${svgPeriostSolid()}<div class="name">Sólida</div><div class="desc">continua, engrosada</div></div>
+          <div class="ladder-step">\${svgPeriostLamelar()}<div class="name">Lamelada</div><div class="desc">"piel de cebolla"</div></div>
+          <div class="ladder-step">\${svgPeriostSpiculated()}<div class="name">Espiculada</div><div class="desc">"rayos de sol"</div></div>
+          <div class="ladder-step">\${svgCodman()}<div class="name">Triángulo de Codman</div><div class="desc">reacción interrumpida</div></div>
+        </div>
+        <div class="ladder-bar"></div>
+        <div class="ladder-labels"><span>MENOS MALIGNA</span><span>MÁS MALIGNA</span></div>
+      </div>
+      <div class="card">
+        <p style="font-size:12.5px; color:var(--text-dim);">El <b style="color:var(--text)">triángulo de Codman</b> se forma cuando el crecimiento tumoral es tan rápido que levanta y rompe el periostio, dejando un borde reactivo aislado en la base — signo clásico de agresividad, típico de osteosarcoma.</p>
+      </div>
+    \`
+  },
+  {
+    key:"destruccion",
+    label:"Tipo de destrucción",
+    title:"4 · Tipo de destrucción ósea",
+    sub:"El patrón con el que la lesión reemplaza la trabécula ósea normal.",
+    render: () => \`
+      <div class="card">
+        <div class="pattern-row">
+          <div class="pattern-card">
+            \${svgGeographic()}
+            <div class="ptitle">Geográfico</div>
+            <span class="plevel lvl-low">Baja agresividad</span>
+            <div class="pex">Bordes bien definidos · casi siempre benigna (más si tiene esclerosis)<br><b style="color:var(--text-dim)">Ej.</b> Encondroma, defecto fibroso cortical, displasia fibrosa, quiste óseo simple</div>
+          </div>
+          <div class="pattern-card">
+            \${svgMothEaten()}
+            <div class="ptitle">Apolillado</div>
+            <span class="plevel lvl-mid">Agresiva</span>
+            <div class="pex">Múltiples lesiones pequeñas mal definidas · frecuentemente maligna<br><b style="color:var(--text-dim)">Ej.</b> Ewing, mieloma, osteosarcoma, osteomielitis, linfoma</div>
+          </div>
+          <div class="pattern-card">
+            \${svgPermeative()}
+            <div class="ptitle">Permeativo</div>
+            <span class="plevel lvl-high">Muy agresiva</span>
+            <div class="pex">Innumerables lesiones sutiles, mal definidas · casi siempre maligna<br><b style="color:var(--text-dim)">Ej.</b> Ewing, METS, mieloma, linfoma, leucemia, neuroblastoma</div>
+          </div>
+        </div>
+      </div>
+    \`
+  },
+  {
+    key:"matriz",
+    label:"Matriz",
+    title:"5 · Matriz tumoral",
+    sub:"Calcificaciones o mineralización dentro de la lesión — orienta al tejido de origen.",
+    render: () => \`
+      <div class="grid2">
+        <div class="card">
+          <h4><span class="swatch" style="background:var(--cyan)"></span>Matriz condroide</h4>
+          <p style="font-size:12px; color:var(--text-dim);">Tumores cartilaginosos. 4 patrones descriptivos:</p>
+          <div class="diagram">\${svgChondroidMatrix()}</div>
+          <p class="cap" style="text-align:left;">Puntiforme · floculante · anillos y arcos · "palomita de maíz"</p>
+          <p style="font-size:11.5px; color:var(--text-faint); margin-top:6px;"><b style="color:var(--text-dim)">Ej.</b> Encondroma, condrosarcoma, condroblastoma</p>
+        </div>
+        <div class="card">
+          <h4><span class="swatch" style="background:var(--amber)"></span>Matriz osteoide</h4>
+          <p style="font-size:12px; color:var(--text-dim);">Tumores formadores de hueso.</p>
+          <div class="diagram">\${svgOsteoidMatrix()}</div>
+          <p class="cap" style="text-align:left;">Densidades nubosas, amorfas o "algodonosas"</p>
+          <p style="font-size:11.5px; color:var(--text-faint); margin-top:6px;"><b style="color:var(--text-dim)">Ej.</b> Tumores osteoblásticos benignos, osteosarcoma, sarcoma de Ewing, linfoma</p>
+        </div>
+      </div>
+    \`
+  },
+  {
+    key:"extension",
+    label:"Extensión",
+    title:"6 · Extensión a tejidos blandos",
+    sub:"La ruptura de la cortical con invasión de partes blandas es uno de los signos más directos de agresividad.",
+    render: () => \`
+      <div class="card">
+        <div class="diagram">\${svgSoftTissueExtension()}</div>
+        <p style="font-size:12.5px; color:var(--text-dim); margin-top:10px; text-align:center;">A mayor extensión hacia tejidos blandos → <b style="color:var(--malign)">mayor agresividad</b></p>
+        <p class="cap" style="margin-top:8px;">Mejor evaluada con RM T2 con supresión grasa (FatSat), no con radiografía simple.</p>
+      </div>
+    \`
+  },
+  {
+    key:"multiple",
+    label:"¿Solitaria o múltiple?",
+    title:"7 · ¿Lesión solitaria o múltiple?",
+    sub:"El número de lesiones cambia por completo el diagnóstico diferencial.",
+    render: () => \`
+      <div class="card">
+        <h4><span class="swatch" style="background:var(--cyan)"></span>Lesiones poliostóticas — causas frecuentes</h4>
+        <div style="margin-top:8px;">
+          <span class="badge">Fibroma no osificante</span>
+          <span class="badge">Displasia fibrosa</span>
+          <span class="badge">Osteomielitis multifocal</span>
+          <span class="badge">Encondromas (Sd. Ollier)</span>
+          <span class="badge">Osteocondromas</span>
+          <span class="badge">Leucemia</span>
+          <span class="badge">Ewing metastásico</span>
+          <span class="badge">Encondromas + hemangiomas (Sd. Maffucci)</span>
+        </div>
+      </div>
+      <div class="card">
+        <h4><span class="swatch" style="background:var(--malign)"></span>Poliostóticas en &gt;30 años</h4>
+        <p style="font-size:12.5px; color:var(--text-dim);"><b style="color:var(--text)">Más comunes:</b> Metástasis · Mieloma múltiple · Encondromas</p>
+        <p style="font-size:12.5px; color:var(--text-dim); margin-top:4px;"><b style="color:var(--text)">Menos comunes:</b> Displasia fibrosa · Tumor de Brown (hiperparatiroidismo) · Infarto óseo</p>
+      </div>
+      <div class="mnemonic">
+        <div class="mtitle">Nemotecnia · Lesiones osteolíticas múltiples</div>
+        <div class="mchip-row">
+          <div class="mchip"><b>F</b>eemmhi — displasia Fibrosa</div>
+          <div class="mchip"><b>E</b> — Encondromas</div>
+          <div class="mchip"><b>E</b> — granuloma Eosinofílico</div>
+          <div class="mchip"><b>M M</b> — Metástasis y Mieloma</div>
+          <div class="mchip"><b>H</b> — Hiperparatiroidismo</div>
+          <div class="mchip"><b>I</b> — Infección</div>
+        </div>
+      </div>
+    \`
+  },
+  {
+    key:"ddx",
+    label:"DDx por edad y radiopacidad",
+    title:"Referencia · Diagnósticos diferenciales",
+    sub:"Dos tablas de consulta rápida para cerrar el razonamiento semiológico.",
+    render: () => \`
+      <div class="card">
+        <h4><span class="swatch" style="background:var(--amber)"></span>Por grupo etario</h4>
+        <table>
+          <tr><th>0–5 años</th><th>5–20 años</th><th>&gt;40 años</th></tr>
+          <tr>
+            <td>METS neuroblastoma<br>METS rabdomiosarcoma</td>
+            <td>Granuloma eosinófilo<br>Displasia fibrosa<br>Sarcoma de Ewing</td>
+            <td>METS (cualquiera)<br>Mieloma<br>Linfoma<br>Enf. Paget<br>Infarto óseo<br>Condrosarcoma<br>Histiocitoma fibroso maligno</td>
+          </tr>
+        </table>
+        <p class="cap" style="margin-top:10px;">Todas las edades: Osteosarcoma · Osteomielitis · Leucemia</p>
+      </div>
+      <div class="card">
+        <h4><span class="swatch" style="background:var(--cyan)"></span>Por radiopacidad de la lesión</h4>
+        <table>
+          <tr><th>Líticas</th><th>Escleróticas</th><th>Mixtas</th></tr>
+          <tr>
+            <td>Gran mayoría de tumores benignos y malignos</td>
+            <td>Islote óseo (enostosis) · Osteoma osteoide · Osteoblastoma · Osteosarcoma · Mets osteoblásticas · Encondromas mineralizados · Lesiones benignas post-resolución (FNO, QOS)</td>
+            <td>Linfoma · Displasia fibrosa · Osteomielitis</td>
+          </tr>
+        </table>
+      </div>
+    \`
+  }
+];
+
+const nav = document.getElementById('stepNav');
+const main = document.getElementById('mainContent');
+
+steps.forEach((s, i) => {
+  const btn = document.createElement('button');
+  btn.className = 'step-btn' + (i===0?' active':'');
+  btn.dataset.key = s.key;
+  btn.innerHTML = \`<span class="num">\${String(i+1).padStart(2,'0')}</span>\${s.label}\`;
+  btn.onclick = () => activate(s.key);
+  nav.appendChild(btn);
+
+  const panel = document.createElement('div');
+  panel.className = 'panel' + (i===0?' active':'');
+  panel.id = 'panel-' + s.key;
+  panel.innerHTML = \`
+    <div class="panel-head">
+      <span class="panel-title">\${s.title}</span>
+    </div>
+    <p class="panel-sub">\${s.sub}</p>
+    \${s.render()}
+  \`;
+  main.appendChild(panel);
+});
+
+function activate(key){
+  document.querySelectorAll('.step-btn').forEach(b => b.classList.toggle('active', b.dataset.key===key));
+  document.querySelectorAll('.panel').forEach(p => p.classList.toggle('active', p.id==='panel-'+key));
+  document.getElementById('panel-'+key).scrollIntoView({behavior:'smooth', block:'start'});
+}
+
+/* ============== SVG GENERATORS ============== */
+
+function svgTransverse(label, type){
+  let lesion = '';
+  if(type==='central'){
+    lesion = \`<ellipse cx="90" cy="55" rx="26" ry="30" fill="#4dd9e8" opacity="0.55" stroke="#42d7e8" stroke-width="1.5"/>\`;
+  } else if(type==='excentrica'){
+    lesion = \`<ellipse cx="115" cy="55" rx="24" ry="28" fill="#4dd9e8" opacity="0.55" stroke="#42d7e8" stroke-width="1.5"/>\`;
+  } else if(type==='cortical'){
+    lesion = \`<ellipse cx="140" cy="55" rx="12" ry="20" fill="#4dd9e8" opacity="0.55" stroke="#42d7e8" stroke-width="1.5"/>\`;
+  } else {
+    lesion = \`<ellipse cx="152" cy="55" rx="16" ry="18" fill="#4dd9e8" opacity="0.55" stroke="#42d7e8" stroke-width="1.5"/>\`;
+  }
+  return \`<svg viewBox="0 0 180 110">
+    <rect x="55" y="5" width="20" height="100" fill="#2a3340"/>
+    <rect x="130" y="5" width="20" height="100" fill="#2a3340" opacity="\${type==='yuxtacortical'?0.4:1}"/>
+    <rect x="75" y="5" width="55" height="100" fill="#1a2028"/>
+    \${lesion}
+  </svg>\`;
+}
+
+function svgLongBone(){
+  return \`<svg viewBox="0 0 320 260">
+    <!-- bone shaft -->
+    <path d="M120 5 C110 5 108 25 112 40 L118 110 C90 130 90 170 118 190 L122 250 L198 250 L202 190 C230 170 230 130 202 110 L208 40 C212 25 210 5 200 5 Z"
+      fill="#232c36" stroke="#3a4450" stroke-width="1.5"/>
+    <!-- zone bands -->
+    <rect x="60" y="5" width="200" height="55" fill="#4dd9e8" opacity="0.05"/>
+    <rect x="60" y="60" width="200" height="90" fill="#f0b656" opacity="0.06"/>
+    <rect x="60" y="150" width="200" height="100" fill="#ef5a5a" opacity="0.05"/>
+    <!-- dashed separators -->
+    <line x1="60" y1="60" x2="260" y2="60" stroke="#4dd9e8" stroke-width="1" stroke-dasharray="4 3" opacity="0.5"/>
+    <line x1="60" y1="150" x2="260" y2="150" stroke="#f0b656" stroke-width="1" stroke-dasharray="4 3" opacity="0.5"/>
+    <!-- labels -->
+    <text x="14" y="35" fill="#4dd9e8" font-size="11" font-family="IBM Plex Mono" font-weight="600">EPIFISIS</text>
+    <text x="14" y="108" fill="#f0b656" font-size="11" font-family="IBM Plex Mono" font-weight="600">METAFISIS</text>
+    <text x="14" y="203" fill="#ef5a5a" font-size="11" font-family="IBM Plex Mono" font-weight="600">DIAFISIS</text>
+  </svg>\`;
+}
+
+function svgTransitionZone(){
+  return \`<svg viewBox="0 0 320 150">
+    <!-- narrow ZT -->
+    <rect x="10" y="10" width="70" height="130" fill="#1a2028"/>
+    <rect x="10" y="10" width="8" height="130" fill="#3a4450"/>
+    <rect x="72" y="10" width="8" height="130" fill="#3a4450"/>
+    <ellipse cx="45" cy="75" rx="26" ry="50" fill="#4fca8c" opacity="0.5" stroke="#4fca8c" stroke-width="2.5"/>
+    <text x="45" y="145" fill="#4fca8c" font-size="9.5" font-family="IBM Plex Mono" text-anchor="middle">ESTRECHA</text>
+
+    <!-- wide ZT -->
+    <rect x="230" y="10" width="80" height="130" fill="#1a2028"/>
+    <rect x="230" y="10" width="8" height="130" fill="#3a4450"/>
+    <rect x="302" y="10" width="8" height="130" fill="#3a4450"/>
+    <path d="M255 30 C 280 20, 295 40, 285 60 C 300 70, 290 95, 275 100 C 285 115, 260 130, 250 115 C 235 120, 230 90, 245 80 C 230 65, 245 40, 255 30 Z"
+      fill="#ef5a5a" opacity="0.5" stroke="#ef5a5a" stroke-width="2" stroke-dasharray="1 3"/>
+    <text x="270" y="145" fill="#ef5a5a" font-size="9.5" font-family="IBM Plex Mono" text-anchor="middle">AMPLIA</text>
+
+    <!-- arrow between -->
+    <text x="160" y="80" fill="#5c6874" font-size="11" font-family="IBM Plex Mono" text-anchor="middle">vs</text>
+  </svg>\`;
+}
+
+function svgPeriostSolid(){
+  return \`<svg viewBox="0 0 90 70">
+    <rect x="30" y="5" width="16" height="60" fill="#232c36"/>
+    <rect x="44" y="5" width="16" height="60" fill="#232c36"/>
+    <rect x="28" y="5" width="4" height="60" fill="#4fca8c"/>
+    <rect x="58" y="5" width="4" height="60" fill="#4fca8c"/>
+  </svg>\`;
+}
+function svgPeriostLamelar(){
+  return \`<svg viewBox="0 0 90 70">
+    <rect x="30" y="5" width="16" height="60" fill="#232c36"/>
+    <rect x="44" y="5" width="16" height="60" fill="#232c36"/>
+    \${[0,1,2].map(i=>\`<path d="M \${27-i*3} 5 Q \${20-i*3} 35 \${27-i*3} 65" fill="none" stroke="#f0b656" stroke-width="1.4" opacity="\${0.9-i*0.25}"/>\`).join('')}
+    \${[0,1,2].map(i=>\`<path d="M \${63+i*3} 5 Q \${70+i*3} 35 \${63+i*3} 65" fill="none" stroke="#f0b656" stroke-width="1.4" opacity="\${0.9-i*0.25}"/>\`).join('')}
+  </svg>\`;
+}
+function svgPeriostSpiculated(){
+  let spikesL='', spikesR='';
+  for(let y=8; y<64; y+=6){
+    spikesL += \`<line x1="30" y1="\${y}" x2="\${30-8-Math.random()*4}" y2="\${y+3}" stroke="#ef5a5a" stroke-width="1.2" opacity="0.85"/>\`;
+    spikesR += \`<line x1="60" y1="\${y}" x2="\${60+8+Math.random()*4}" y2="\${y+3}" stroke="#ef5a5a" stroke-width="1.2" opacity="0.85"/>\`;
+  }
+  return \`<svg viewBox="0 0 90 70">
+    <rect x="30" y="5" width="16" height="60" fill="#232c36"/>
+    <rect x="44" y="5" width="16" height="60" fill="#232c36"/>
+    \${spikesL}\${spikesR}
+  </svg>\`;
+}
+function svgCodman(){
+  return \`<svg viewBox="0 0 90 70">
+    <rect x="30" y="5" width="16" height="60" fill="#232c36"/>
+    <rect x="44" y="5" width="16" height="60" fill="#232c36"/>
+    <path d="M60 15 L74 30 L60 34 Z" fill="#ef5a5a" opacity="0.8"/>
+    <path d="M60 15 L74 30" stroke="#ef5a5a" stroke-width="1.5"/>
+    <path d="M60 34 L60 15" stroke="#ef5a5a" stroke-width="1.5"/>
+    <ellipse cx="52" cy="40" rx="9" ry="14" fill="#ef5a5a" opacity="0.35"/>
+  </svg>\`;
+}
+
+function svgGeographic(){
+  return \`<svg viewBox="0 0 200 110">
+    <rect x="0" y="0" width="200" height="110" fill="#1a2028"/>
+    <ellipse cx="100" cy="55" rx="55" ry="38" fill="#4fca8c" opacity="0.45" stroke="#4fca8c" stroke-width="2.5"/>
+  </svg>\`;
+}
+function svgMothEaten(){
+  let dots='';
+  for(let i=0;i<26;i++){
+    const x = 40+Math.random()*120, y=20+Math.random()*70, r=3+Math.random()*5;
+    dots += \`<circle cx="\${x}" cy="\${y}" r="\${r}" fill="#f0b656" opacity="\${0.35+Math.random()*0.4}"/>\`;
+  }
+  return \`<svg viewBox="0 0 200 110">
+    <rect x="0" y="0" width="200" height="110" fill="#1a2028"/>
+    \${dots}
+  </svg>\`;
+}
+function svgPermeative(){
+  let dots='';
+  for(let i=0;i<90;i++){
+    const x = Math.random()*200, y=Math.random()*110, r=0.8+Math.random()*1.6;
+    dots += \`<circle cx="\${x}" cy="\${y}" r="\${r}" fill="#ef5a5a" opacity="\${0.3+Math.random()*0.5}"/>\`;
+  }
+  return \`<svg viewBox="0 0 200 110">
+    <rect x="0" y="0" width="200" height="110" fill="#1a2028"/>
+    \${dots}
+  </svg>\`;
+}
+
+function svgChondroidMatrix(){
+  return \`<svg viewBox="0 0 300 110">
+    <rect width="300" height="110" fill="#1a2028"/>
+    <circle cx="40" cy="30" r="3" fill="#4dd9e8"/><circle cx="55" cy="45" r="2.5" fill="#4dd9e8"/><circle cx="35" cy="55" r="2" fill="#4dd9e8"/>
+    <text x="20" y="90" fill="#5c6874" font-size="9" font-family="IBM Plex Mono">puntiforme</text>
+
+    <path d="M110 25 Q120 35 110 45 Q100 55 110 65" fill="none" stroke="#4dd9e8" stroke-width="1.5" opacity="0.7"/>
+    <circle cx="120" cy="35" r="2.5" fill="#4dd9e8"/><circle cx="105" cy="50" r="2" fill="#4dd9e8"/>
+    <text x="90" y="90" fill="#5c6874" font-size="9" font-family="IBM Plex Mono">floculante</text>
+
+    <circle cx="195" cy="45" r="12" fill="none" stroke="#4dd9e8" stroke-width="2"/>
+    <circle cx="210" cy="55" r="8" fill="none" stroke="#4dd9e8" stroke-width="2"/>
+    <text x="175" y="90" fill="#5c6874" font-size="9" font-family="IBM Plex Mono">anillos y arcos</text>
+
+    <circle cx="270" cy="40" r="7" fill="#4dd9e8" opacity="0.8"/>
+    <circle cx="260" cy="52" r="6" fill="#4dd9e8" opacity="0.8"/>
+    <circle cx="278" cy="55" r="5" fill="#4dd9e8" opacity="0.8"/>
+    <text x="245" y="90" fill="#5c6874" font-size="9" font-family="IBM Plex Mono">"palomita"</text>
+  </svg>\`;
+}
+function svgOsteoidMatrix(){
+  let cloud='';
+  for(let i=0;i<40;i++){
+    const x=30+Math.random()*240, y=20+Math.random()*60, r=4+Math.random()*8;
+    cloud += \`<circle cx="\${x}" cy="\${y}" r="\${r}" fill="#f0b656" opacity="\${0.12+Math.random()*0.18}"/>\`;
+  }
+  return \`<svg viewBox="0 0 300 100">
+    <rect width="300" height="100" fill="#1a2028"/>
+    \${cloud}
+  </svg>\`;
+}
+
+function svgSoftTissueExtension(){
+  return \`<svg viewBox="0 0 260 140">
+    <rect x="110" y="5" width="18" height="130" fill="#232c36"/>
+    <rect x="132" y="5" width="18" height="130" fill="#232c36"/>
+    <rect x="106" y="5" width="4" height="130" fill="#3a4450"/>
+    <rect x="150" y="5" width="4" height="130" fill="#3a4450"/>
+    <!-- cortical break -->
+    <path d="M128 40 L150 40 L150 90 L128 90 Z" fill="#1a2028"/>
+    <!-- soft tissue mass -->
+    <path d="M150 35 C 200 30, 215 55, 210 75 C 220 95, 195 110, 170 100 C 160 108, 145 100, 150 90 Z"
+      fill="#ef5a5a" opacity="0.4" stroke="#ef5a5a" stroke-width="2"/>
+    <text x="170" y="128" fill="#ef5a5a" font-size="10" font-family="IBM Plex Mono" text-anchor="middle">masa en tejidos blandos</text>
+    <text x="40" y="72" fill="#5c6874" font-size="9.5" font-family="IBM Plex Mono">cortical</text>
+  </svg>\`;
+}
+<\/script>
+
+</body>
+</html>
+`},
+  {title:"Urografia Intravenosa", topic:"fluoro", date:"2026-07-06", html: `<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Urografía Intravenosa · Técnica e Interpretación</title>
+<style>
+:root{
+  --bg:#0a0e13;
+  --panel:#111823;
+  --panel2:#151f2c;
+  --line:#233043;
+  --cyan:#4fd8d0;
+  --cyan-dim:#2b6b68;
+  --amber:#f0a868;
+  --red:#e66b6b;
+  --text:#e6edf3;
+  --muted:#7e8fa3;
+  --mono:'JetBrains Mono','SF Mono',Consolas,monospace;
+  --sans:'Space Grotesk',-apple-system,Segoe UI,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{
+  background:
+    radial-gradient(circle at 15% 0%, rgba(79,216,208,0.06), transparent 40%),
+    var(--bg);
+  color:var(--text);
+  font-family:var(--sans);
+  line-height:1.5;
+  padding-bottom:60px;
+}
+
+/* ===== HEADER: PACS-style study bar ===== */
+header{
+  border-bottom:1px solid var(--line);
+  background:var(--panel);
+  padding:18px 32px;
+  position:sticky;top:0;z-index:50;
+  display:flex;justify-content:space-between;align-items:center;
+  flex-wrap:wrap;gap:10px;
+}
+.study-id{
+  font-family:var(--mono);
+  font-size:11px;
+  color:var(--cyan);
+  letter-spacing:1px;
+}
+.header-title h1{
+  font-size:1.5rem;
+  font-weight:600;
+  letter-spacing:-0.02em;
+}
+.header-title p{
+  font-family:var(--mono);
+  font-size:11px;
+  color:var(--muted);
+  margin-top:2px;
+}
+.header-meta{
+  font-family:var(--mono);
+  font-size:11px;
+  color:var(--muted);
+  text-align:right;
+  line-height:1.6;
+}
+.header-meta span{color:var(--cyan);}
+
+.wrap{max-width:1100px;margin:0 auto;padding:0 32px;}
+
+/* ===== NAV pills ===== */
+nav{
+  display:flex;gap:8px;flex-wrap:wrap;
+  padding:20px 0 8px;
+}
+nav a{
+  font-family:var(--mono);
+  font-size:11px;
+  color:var(--muted);
+  text-decoration:none;
+  border:1px solid var(--line);
+  padding:6px 12px;
+  border-radius:20px;
+  transition:.2s;
+}
+nav a:hover{border-color:var(--cyan);color:var(--cyan);}
+
+/* ===== SECTION ===== */
+section{padding:40px 0 10px;border-top:1px solid var(--line);margin-top:20px;}
+section:first-of-type{border-top:none;}
+.eyebrow{
+  font-family:var(--mono);font-size:11px;color:var(--cyan);
+  letter-spacing:2px;text-transform:uppercase;margin-bottom:6px;
+}
+h2{font-size:1.5rem;font-weight:600;margin-bottom:6px;letter-spacing:-0.01em;}
+.lede{color:var(--muted);font-size:14px;max-width:680px;margin-bottom:28px;}
+
+/* ===== INTRO PANEL ===== */
+.intro-grid{display:grid;grid-template-columns:1.3fr 1fr;gap:24px;padding:28px 0 8px;}
+@media(max-width:800px){.intro-grid{grid-template-columns:1fr;}}
+.intro-text p{color:#c3ccd6;font-size:14.5px;margin-bottom:14px;}
+.intro-text b{color:var(--text);}
+.stat-card{
+  background:var(--panel);border:1px solid var(--line);border-radius:10px;
+  padding:16px 18px;margin-bottom:12px;
+}
+.stat-card .k{font-family:var(--mono);font-size:22px;color:var(--cyan);font-weight:700;}
+.stat-card .v{font-size:12px;color:var(--muted);margin-top:2px;}
+
+/* ===== TIMELINE (protocol) ===== */
+.timeline{position:relative;padding-left:26px;margin-top:20px;}
+.timeline::before{
+  content:'';position:absolute;left:7px;top:6px;bottom:6px;width:2px;
+  background:linear-gradient(var(--cyan-dim),var(--line));
+}
+.tl-step{position:relative;padding-bottom:26px;}
+.tl-step:last-child{padding-bottom:0;}
+.tl-step::before{
+  content:'';position:absolute;left:-26px;top:3px;width:14px;height:14px;
+  border-radius:50%;background:var(--panel);border:2px solid var(--cyan);
+}
+.tl-step .tt{
+  font-family:var(--mono);font-size:11px;color:var(--cyan);letter-spacing:1px;
+}
+.tl-step h4{font-size:15px;margin:3px 0 4px;font-weight:600;}
+.tl-step p{font-size:13px;color:var(--muted);max-width:640px;}
+.tl-step .opt{
+  display:inline-block;margin-top:6px;font-family:var(--mono);font-size:10.5px;
+  color:var(--amber);background:rgba(240,168,104,0.08);
+  border:1px solid rgba(240,168,104,0.25);padding:2px 8px;border-radius:12px;
+}
+
+/* ===== RULE CARDS ===== */
+.rule-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px;margin-top:20px;}
+@media(max-width:800px){.rule-grid{grid-template-columns:1fr;}}
+.rule-card{
+  background:var(--panel);border:1px solid var(--line);border-radius:10px;
+  padding:18px 20px;
+}
+.rule-card .num{
+  font-family:var(--mono);font-size:11px;color:var(--cyan-dim);
+}
+.rule-card h4{font-size:14.5px;margin:4px 0 8px;color:var(--cyan);}
+.rule-card p{font-size:13px;color:#c3ccd6;}
+.rule-card ul{margin-top:8px;padding-left:16px;}
+.rule-card li{font-size:12.5px;color:var(--muted);margin-bottom:4px;}
+
+/* ===== NORMAL VALUES BAR ===== */
+.values-strip{
+  display:flex;flex-wrap:wrap;gap:14px;margin:24px 0;
+}
+.value-box{
+  flex:1 1 150px;
+  background:var(--panel2);border:1px solid var(--line);
+  border-left:3px solid var(--cyan);border-radius:6px;
+  padding:12px 14px;
+}
+.value-box .label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;}
+.value-box .val{font-family:var(--mono);font-size:16px;color:var(--text);margin-top:4px;}
+
+/* ===== PATHOLOGY GALLERY ===== */
+.gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:14px;margin-top:20px;}
+.path-card{
+  background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden;
+}
+.path-card .sig{
+  height:6px;
+}
+.sig.high{background:var(--red);}
+.sig.mid{background:var(--amber);}
+.sig.low{background:var(--cyan);}
+.path-card .body{padding:14px 16px;}
+.path-card h5{font-size:13.5px;margin-bottom:6px;}
+.path-card p{font-size:12px;color:var(--muted);}
+.tag-row{margin-top:10px;display:flex;gap:6px;flex-wrap:wrap;}
+.tag{
+  font-family:var(--mono);font-size:9.5px;color:var(--muted);
+  border:1px solid var(--line);padding:2px 6px;border-radius:8px;
+}
+
+/* ===== DIFFERENTIAL TABLE ===== */
+table{width:100%;border-collapse:collapse;margin-top:18px;font-size:13px;}
+th{
+  text-align:left;font-family:var(--mono);font-size:10.5px;color:var(--cyan);
+  text-transform:uppercase;letter-spacing:.5px;padding:10px 12px;
+  border-bottom:1px solid var(--line);
+}
+td{padding:12px;border-bottom:1px solid var(--line);color:#c3ccd6;vertical-align:top;}
+tr:hover td{background:rgba(79,216,208,0.03);}
+td.hl{color:var(--cyan);font-weight:600;}
+
+/* ===== SVG diagram panel ===== */
+.diagram-panel{
+  background:var(--panel);border:1px solid var(--line);border-radius:12px;
+  padding:24px;margin-top:24px;display:flex;gap:24px;align-items:center;flex-wrap:wrap;
+}
+.diagram-panel svg{flex:0 0 260px;}
+.diagram-panel .exp{flex:1;min-width:240px;font-size:13px;color:var(--muted);}
+.diagram-panel .exp b{color:var(--text);}
+
+footer{
+  margin-top:60px;padding:24px 32px;border-top:1px solid var(--line);
+  font-family:var(--mono);font-size:10.5px;color:var(--muted);
+  display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-title">
+    <div class="study-id">RG · EDUCATION EXHIBIT · 2001;21:799–824</div>
+    <h1>Urografía Intravenosa</h1>
+    <p>Técnica y criterios de interpretación</p>
+  </div>
+  <div class="header-meta">
+    Dyer RB · Chen MYM · Zagoria RJ<span> · </span>Wake Forest University<br>
+    Radiographics — <span>1.0 CME</span>
+  </div>
+</header>
+
+<div class="wrap">
+<nav>
+  <a href="#tecnica">Técnica</a>
+  <a href="#parenquima">Parénquima renal</a>
+  <a href="#colector">Sistema colector</a>
+  <a href="#uretero">Uréter</a>
+  <a href="#vejiga">Vejiga</a>
+  <a href="#valores">Valores normales</a>
+</nav>
+
+<!-- INTRO -->
+<section id="intro">
+  <div class="eyebrow">Contexto clínico</div>
+  <h2>Por qué la urografía sigue vigente</h2>
+  <div class="intro-grid">
+    <div class="intro-text">
+      <p>La urografía intravenosa fue durante décadas la piedra angular del estudio del tracto urinario. Aunque US, TC y RM se usan hoy con más frecuencia, ninguna reproduce la <b>secuencia temporal de opacificación</b> que permite a la urografía detallar el urotelio con una resolución que las modalidades transversales aún no igualan.</p>
+      <p>Sigue siendo relevante en la evaluación de <b>hematuria</b> y en el seguimiento pre/postratamiento de <b>litiasis</b>. Su valor depende por completo de una técnica correcta y de la aplicación sistemática de reglas de interpretación — el objetivo de este resumen.</p>
+    </div>
+    <div>
+      <div class="stat-card"><div class="k">8</div><div class="v">Pasos del protocolo estándar</div></div>
+      <div class="stat-card"><div class="k">9–13 cm</div><div class="v">Longitud renal normal (cefalocaudal)</div></div>
+      <div class="stat-card"><div class="k">7–14</div><div class="v">Cálices por riñón (rango normal)</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- TECNICA -->
+<section id="tecnica">
+  <div class="eyebrow">Protocolo estándar</div>
+  <h2>Secuencia de adquisición</h2>
+  <p class="lede">Ocho pasos temporizados desde la placa simple hasta la evaluación vesical, diseñados para capturar cada segmento del tracto urinario en su fase de opacificación óptima.</p>
+
+  <div class="timeline">
+    <div class="tl-step">
+      <div class="tt">PASO 1 · PRELIMINAR</div>
+      <h4>Radiografía KUB + tomograma scout</h4>
+      <p>Define técnica y nivel tomográfico. Debe cubrir desde la región suprarrenal hasta debajo de la sínfisis púbica — evalúa siempre calcificaciones antes del contraste, que puede enmascararlas.</p>
+      <span class="opt">Opcional: oblicuas, tomogramas adicionales</span>
+    </div>
+    <div class="tl-step">
+      <div class="tt">PASO 2</div>
+      <h4>Administración de contraste IV</h4>
+      <p>Excreción casi exclusiva por filtración glomerular, con concentración progresiva en el nefrón postglomerular.</p>
+    </div>
+    <div class="tl-step">
+      <div class="tt">PASO 3 · MIN 1–3</div>
+      <h4>Imágenes nefrográficas</h4>
+      <p>Nefrotomogramas o imágenes colimadas a riñones. Visualización óptima del parénquima renal; imprescindible para detección de masas.</p>
+      <span class="opt">Opcional: oblicuas, nefrotomogramas oblicuos</span>
+    </div>
+    <div class="tl-step">
+      <div class="tt">PASO 4 · MIN 5</div>
+      <h4>KUB a los 5 minutos</h4>
+      <p>Evalúa simetría temporal de opacificación entre ambos riñones.</p>
+    </div>
+    <div class="tl-step">
+      <div class="tt">PASO 5</div>
+      <h4>Compresión abdominal</h4>
+      <p>Se aplica inmediatamente tras revisar la placa de 5 min, salvo contraindicación (obstrucción, aneurisma, cirugía reciente, trauma, trasplante/derivación urinaria).</p>
+    </div>
+    <div class="tl-step">
+      <div class="tt">PASO 6 · MIN 10</div>
+      <h4>Imagen pielográfica colimada a riñones</h4>
+      <p>5 min tras la compresión. Especialmente importante con contraste de baja osmolaridad, ya que la diuresis osmótica es menor.</p>
+      <span class="opt">Opcional: oblicuas, tomogramas repetidos</span>
+    </div>
+    <div class="tl-step">
+      <div class="tt">PASO 7 · MIN 15</div>
+      <h4>Imágenes uréter-vejiga</h4>
+      <p>Inmediatamente tras liberar la compresión — el bolo concentrado permite visualizar toda la superficie luminal ureteral. Se complementa con imágenes fluoroscópicas puntuales.</p>
+      <span class="opt">Opcional: prono, bipedestación, KUB tardío</span>
+    </div>
+    <div class="tl-step">
+      <div class="tt">PASO 8</div>
+      <h4>Imagen vesical</h4>
+      <p>La vejiga suele verse adecuadamente en las imágenes ureterales previas.</p>
+      <span class="opt">Opcional: tardía, oblicua, prono, postmiccional</span>
+    </div>
+  </div>
+</section>
+
+<!-- PARENQUIMA -->
+<section id="parenquima">
+  <div class="eyebrow">Regla de interpretación · Riñón</div>
+  <h2>Parénquima renal</h2>
+  <p class="lede">Evaluación óptima en fase nefrográfica: contorno, tamaño, eje, grosor parenquimatoso y simetría temporal.</p>
+
+  <div class="values-strip">
+    <div class="value-box"><div class="label">Asimetría significativa</div><div class="val">D ≥1.5 cm > I &nbsp;|&nbsp; I ≥2 cm > D</div></div>
+    <div class="value-box"><div class="label">Grosor polar</div><div class="val">3–3.5 cm</div></div>
+    <div class="value-box"><div class="label">Grosor interpolar</div><div class="val">2–2.5 cm</div></div>
+    <div class="value-box"><div class="label">Eje renal</div><div class="val">paralelo al psoas superior</div></div>
+  </div>
+
+  <div class="diagram-panel">
+    <svg viewBox="0 0 220 260" width="220" height="260">
+      <path d="M60 30 Q20 60 25 120 Q28 180 60 220 Q90 245 120 220 Q145 190 140 130 Q150 90 130 50 Q110 20 90 25 Q75 22 60 30 Z"
+            fill="none" stroke="#4fd8d0" stroke-width="2"/>
+      <path d="M60 30 Q20 60 25 120 Q28 180 60 220 Q90 245 120 220 Q145 190 140 130 Q150 90 130 50 Q110 20 90 25 Q75 22 60 30 Z"
+            fill="none" stroke="#f0a868" stroke-width="1.4" stroke-dasharray="4 3" transform="scale(0.86) translate(14,20)"/>
+      <circle cx="65" cy="60" r="3" fill="#e6edf3"/>
+      <circle cx="55" cy="100" r="3" fill="#e6edf3"/>
+      <circle cx="60" cy="145" r="3" fill="#e6edf3"/>
+      <circle cx="80" cy="185" r="3" fill="#e6edf3"/>
+      <circle cx="120" cy="190" r="3" fill="#e6edf3"/>
+      <circle cx="135" cy="150" r="3" fill="#e6edf3"/>
+      <circle cx="130" cy="100" r="3" fill="#e6edf3"/>
+      <circle cx="110" cy="55" r="3" fill="#e6edf3"/>
+      <text x="10" y="15" fill="#7e8fa3" font-family="monospace" font-size="9">línea interpapilar</text>
+    </svg>
+    <div class="exp">
+      <p><b>Línea interpapilar:</b> une los vértices papilares y debe seguir de cerca el contorno renal. Cualquier desviación (línea discontinua naranja) exige explicación — puede indicar pérdida parenquimatosa focal (cicatriz post-inflamatoria, infarto) o efecto de masa.</p>
+    </div>
+  </div>
+
+  <div class="rule-grid">
+    <div class="rule-card"><span class="num">01</span>
+      <h4>Contorno y grosor</h4>
+      <p>Disminución con distorsión calicial → cicatriz postinflamatoria/litiásica. Pérdida entre cálices sin distorsión → infarto. Aumento con distorsión calicial → masa.</p>
+    </div>
+    <div class="rule-card"><span class="num">02</span>
+      <h4>Contraste "doble contorno"</h4>
+      <p>Hallazgo sutil pero clave en tomografía — puede ser la única pista de un carcinoma de células renales.</p>
+    </div>
+    <div class="rule-card"><span class="num">03</span>
+      <h4>Evolución nefrográfica anómala</h4>
+      <p>Nefrograma persistente sin pielograma → sospechar hipotensión/reacción a contraste, u obstrucción aguda de alto grado.</p>
+    </div>
+    <div class="rule-card"><span class="num">04</span>
+      <h4>Variantes normales</h4>
+      <p>Indentaciones (sulcus interpartialis) y "jorobas" corticales (columnas de Bertin, labios hilares) reflejan anatomía fetal persistente — no confundir con patología.</p>
+    </div>
+  </div>
+
+  <div class="gallery">
+    <div class="path-card"><div class="sig high"></div><div class="body">
+      <h5>Carcinoma de células renales</h5>
+      <p>Masa con aumento de grosor parenquimatoso, distorsión calicial y/o doble contorno.</p>
+      <div class="tag-row"><span class="tag">TC confirmatoria</span><span class="tag">sólido</span></div>
+    </div></div>
+    <div class="path-card"><div class="sig low"></div><div class="body">
+      <h5>Quiste simple</h5>
+      <p>Ausencia de realce nefrográfico; "beaking" cortical en el margen — signo de crecimiento lento, no de benignidad per se.</p>
+      <div class="tag-row"><span class="tag">US confirmatoria</span></div>
+    </div></div>
+    <div class="path-card"><div class="sig mid"></div><div class="body">
+      <h5>Nefropatía por reflujo</h5>
+      <p>Pérdida parenquimatosa polar con "clubbing" calicial subyacente.</p>
+      <div class="tag-row"><span class="tag">crónico</span></div>
+    </div></div>
+    <div class="path-card"><div class="sig high"></div><div class="body">
+      <h5>Estenosis de arteria renal</h5>
+      <p>Riñón pequeño, densidad nefrográfica disminuida, asimetría temporal de llenado, hiperconcentración tardía.</p>
+      <div class="tag-row"><span class="tag">HTA renovascular</span></div>
+    </div></div>
+    <div class="path-card"><div class="sig mid"></div><div class="body">
+      <h5>Riñón en herradura</h5>
+      <p>Alteración característica del eje renal con anomalías rotacionales/posicionales asociadas.</p>
+      <div class="tag-row"><span class="tag">↑ riesgo litiasis/infección</span></div>
+    </div></div>
+    <div class="path-card"><div class="sig high"></div><div class="body">
+      <h5>Poliquistosis renal AD</h5>
+      <p>Riñones aumentados de tamaño con múltiples defectos parenquimatosos ("nefrograma en queso suizo").</p>
+      <div class="tag-row"><span class="tag">asimétrico temprano</span></div>
+    </div></div>
+  </div>
+</section>
+
+<!-- COLECTOR -->
+<section id="colector">
+  <div class="eyebrow">Regla de interpretación · Cálices y pelvis</div>
+  <h2>Sistema colector</h2>
+  <p class="lede">La urografía es la modalidad más precisa para evaluar las superficies urotelio-dependientes: fórnices, papilas y contorno pielocalicial.</p>
+
+  <div class="diagram-panel">
+    <svg viewBox="0 0 240 200" width="240" height="200">
+      <text x="10" y="20" fill="#7e8fa3" font-family="monospace" font-size="9">Espectro de obstrucción calicial</text>
+      <!-- normal chalice -->
+      <g transform="translate(20,40)">
+        <path d="M20 0 L10 30 Q20 40 30 30 Z" fill="none" stroke="#4fd8d0" stroke-width="2"/>
+        <text x="0" y="70" fill="#7e8fa3" font-family="monospace" font-size="8">normal</text>
+      </g>
+      <!-- rounded fornix -->
+      <g transform="translate(90,40)">
+        <path d="M20 0 L10 28 Q20 42 30 28 Z" fill="none" stroke="#f0a868" stroke-width="2"/>
+        <text x="-3" y="70" fill="#7e8fa3" font-family="monospace" font-size="8">redondeo leve</text>
+      </g>
+      <!-- clubbing -->
+      <g transform="translate(160,40)">
+        <path d="M20 0 Q5 30 20 45 Q35 30 20 0 Z" fill="none" stroke="#e66b6b" stroke-width="2"/>
+        <text x="-5" y="70" fill="#7e8fa3" font-family="monospace" font-size="8">clubbing</text>
+      </g>
+    </svg>
+    <div class="exp">
+      <p><b>Progresión de obstrucción:</b> redondeo sutil de los márgenes forniceales (temprano/leve) → pérdida progresiva de la impresión papilar → clubbing calicial franco (crónico/severo).</p>
+    </div>
+  </div>
+
+  <div class="rule-grid">
+    <div class="rule-card"><span class="num">01</span>
+      <h4>Continuum papilar</h4>
+      <p>Blush papilar → ectasia tubular benigna → riñón en esponja medular ("signo del cálculo creciente" cuando hay litiasis papilar).</p>
+    </div>
+    <div class="rule-card"><span class="num">02</span>
+      <h4>Necrosis papilar</h4>
+      <p>Extensión de contraste desde el fórnix hacia el parénquima (drepanocitosis) o cavidades centrales en papilas múltiples (abuso de analgésicos).</p>
+    </div>
+    <div class="rule-card"><span class="num">03</span>
+      <h4>Cáliz fantasma</h4>
+      <p>Ausencia de relleno de una porción del sistema colector — causa benigna o maligna; correlacionar con línea interpapilar.</p>
+    </div>
+    <div class="rule-card"><span class="num">04</span>
+      <h4>Defectos de repleción</h4>
+      <p>El más importante a excluir: <b style="color:var(--red)">carcinoma urotelial (células transicionales)</b>. Signo del "goblet" en lesiones de crecimiento lento intraluminal.</p>
+    </div>
+  </div>
+
+  <table>
+    <tr><th>Hallazgo</th><th>Patrón radiológico</th><th>Diagnóstico típico</th></tr>
+    <tr><td class="hl">Divertículo calicial</td><td>Cavidad periférica de relleno lento en comunicación con un cáliz</td><td>Calcificaciones agrupadas si hay litiasis intradiverticular</td></tr>
+    <tr><td class="hl">Oncocáliz</td><td>Relleno irregular de estructuras caliciales</td><td>CCT infiltrante</td></tr>
+    <tr><td class="hl">Quistes de seno renal</td><td>Estrechamiento/desplazamiento del sistema colector sin hidronefrosis real</td><td>Incongruencia US vs. urografía</td></tr>
+    <tr><td class="hl">Tuberculosis</td><td>Cálices "apolillados", cálices fantasma</td><td>Confirmar con urocultivo/pielografía retrógrada</td></tr>
+  </table>
+</section>
+
+<!-- URETER -->
+<section id="uretero">
+  <div class="eyebrow">Regla de interpretación · Uréter</div>
+  <h2>Trayecto y calibre ureteral</h2>
+
+  <div class="values-strip">
+    <div class="value-box"><div class="label">Diámetro dilatado</div><div class="val">&gt;8 mm</div></div>
+    <div class="value-box"><div class="label">Desviación medial</div><div class="val">separación &lt;5 cm</div></div>
+    <div class="value-box"><div class="label">Desviación lateral</div><div class="val">&gt;1 cm de la apófisis transversa</div></div>
+    <div class="value-box"><div class="label">Cresta interuretérica</div><div class="val">&lt;3 mm normal</div></div>
+  </div>
+
+  <table>
+    <tr><th>Causa</th><th>Mecanismo</th><th>Ejemplo</th></tr>
+    <tr><td class="hl">Extrínseca vascular</td><td>Impronta / "notching" por vasos gonadales o iliacos prominentes</td><td>Vena gonadal postparto</td></tr>
+    <tr><td class="hl">Extrínseca — masa</td><td>Desviación medial aguda</td><td>Aneurisma de ilíaca interna</td></tr>
+    <tr><td class="hl">Extrínseca — muscular</td><td>Uréteres distales centralizados y rectificados</td><td>Hipertrofia del psoas</td></tr>
+    <tr><td class="hl">Intrínseca — congénita</td><td>Configuración en "J invertida"</td><td>Uréter circuncavo</td></tr>
+    <tr><td class="hl">Intrínseca — mural</td><td>Pseudodivertículos, defectos de repleción</td><td>↑ riesgo de CCT vesical</td></tr>
+    <tr><td class="hl">Obstructiva distal</td><td>Configuración en "cabeza de cobra"</td><td>Ureterocele ortotópico</td></tr>
+  </table>
+</section>
+
+<!-- VEJIGA -->
+<section id="vejiga">
+  <div class="eyebrow">Regla de interpretación · Vejiga</div>
+  <h2>Contorno, posición y defectos de repleción</h2>
+  <p class="lede">La vejiga está fija solo en su porción inferior — su posición se distorsiona fácilmente por procesos pélvicos adyacentes. La imagen postmiccional es la secuencia más sensible para defectos de repleción.</p>
+
+  <div class="gallery">
+    <div class="path-card"><div class="sig mid"></div><div class="body">
+      <h5>Hipertrofia prostática</h5>
+      <p>Defecto en la base vesical, engrosamiento parietal, formación de "cellules".</p>
+    </div></div>
+    <div class="path-card"><div class="sig high"></div><div class="body">
+      <h5>CCT vesical</h5>
+      <p>Defecto papilar con "signo del moteado" (stipple sign) — más sensible en imagen postmiccional.</p>
+    </div></div>
+    <div class="path-card"><div class="sig low"></div><div class="body">
+      <h5>Lipomatosis pélvica</h5>
+      <p>Desviación medial de uréteres + distorsión vesical + lucencia pélvica aumentada.</p>
+    </div></div>
+    <div class="path-card"><div class="sig mid"></div><div class="body">
+      <h5>Hematoma pélvico</h5>
+      <p>Vejiga "en pera", elevada y elongada; defecto de repleción por coágulo.</p>
+    </div></div>
+  </div>
+</section>
+
+<!-- VALORES -->
+<section id="valores">
+  <div class="eyebrow">Referencia rápida</div>
+  <h2>Umbrales numéricos clave</h2>
+  <table>
+    <tr><th>Parámetro</th><th>Valor normal / umbral</th></tr>
+    <tr><td>Longitud renal</td><td class="hl">9–13 cm (I &gt; D por ~0.5 cm)</td></tr>
+    <tr><td>Asimetría renal significativa</td><td class="hl">D ≥1.5 cm mayor que I; I ≥2 cm mayor que D</td></tr>
+    <tr><td>Grosor parenquimatoso polar</td><td class="hl">3–3.5 cm</td></tr>
+    <tr><td>Grosor parenquimatoso interpolar</td><td class="hl">2–2.5 cm</td></tr>
+    <tr><td>Número de cálices</td><td class="hl">7–14 por riñón</td></tr>
+    <tr><td>Diámetro ureteral dilatado</td><td class="hl">&gt;8 mm</td></tr>
+    <tr><td>Cresta interuretérica</td><td class="hl">&lt;3 mm</td></tr>
+    <tr><td>kVp técnica KUB</td><td class="hl">65–75 kVp, alto mAs, tiempo corto</td></tr>
+    <tr><td>Fase nefrográfica</td><td class="hl">1–3 min post-bolo</td></tr>
+    <tr><td>Fase pielográfica</td><td class="hl">10 min post-contraste (5 min post-compresión)</td></tr>
+    <tr><td>Liberación de compresión</td><td class="hl">15 min post-contraste</td></tr>
+  </table>
+</section>
+
+</div>
+
+<footer>
+  <span>Dyer RB, Chen MYM, Zagoria RJ. Intravenous Urography: Technique and Interpretation. RadioGraphics 2001;21:799–824.</span>
+  <span>Resumen educativo — no sustituye la lectura del artículo original</span>
+</footer>
+
+</body>
+</html>
+`}
+];
+
+var activeFilter = 'all';
+var dashIndex = []; // [{id, title, topic, date}] (html solo temporalmente para contenido semilla/nuevo)
+var topics = []; // [{id, name, color}]
+var storageOk = false;
+var remoteConfigured = false;
+var remoteHasState = false;
+var ADMIN_SESSION_KEY = 'sala-lectura-admin-password';
+
+function esc(s){ var d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
+
+function slugBase(title){
+  var base = title.toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)/g, '');
+  return base || 'item';
+}
+
+function slugify(title){
+  return slugBase(title) + '-' + Date.now().toString(36);
+}
+
+function slugifyTopic(name){
+  var base = slugBase(name);
+  var candidate = base;
+  var n = 1;
+  while(topics.some(function(t){ return t.id === candidate; })){
+    n++;
+    candidate = base + '-' + n;
+  }
+  return candidate;
+}
+
+function cloneDefaults(){
+  topics = DEFAULT_TOPICS.map(function(t){ return {id:t.id, name:t.name, color:t.color}; });
+  dashIndex = DEFAULT_DASHBOARDS.map(function(d, i){
+    return {
+      id: slugBase(d.title) + '-seed-' + i,
+      title: d.title,
+      topic: d.topic,
+      date: d.date,
+      html: d.html
+    };
+  });
+}
+
+async function loadSharedState(){
+  cloneDefaults();
+  try {
+    var res = await fetch('/api/data', {cache:'no-store'});
+    if(!res.ok) throw new Error('HTTP ' + res.status);
+    var payload = await res.json();
+    remoteConfigured = !!payload.configured;
+    if(payload.state && Array.isArray(payload.state.topics) && Array.isArray(payload.state.dashboards)){
+      topics = payload.state.topics;
+      dashIndex = payload.state.dashboards;
+      remoteHasState = true;
+      storageOk = true;
+    } else {
+      remoteHasState = false;
+      storageOk = remoteConfigured;
+    }
+  } catch(e){
+    remoteConfigured = false;
+    remoteHasState = false;
+    storageOk = false;
+  }
+}
+
+function getAdminPassword(){
+  var saved = sessionStorage.getItem(ADMIN_SESSION_KEY);
+  if(saved) return saved;
+  var entered = prompt('Clave de edición de Sala de Lectura:');
+  if(!entered) return null;
+  sessionStorage.setItem(ADMIN_SESSION_KEY, entered);
+  return entered;
+}
+
+async function apiWrite(payload, password){
+  var res = await fetch('/api/data', {
+    method:'PUT',
+    headers:{
+      'Content-Type':'application/json',
+      'Authorization':'Bearer ' + password
+    },
+    body: JSON.stringify(payload)
+  });
+
+  if(res.status === 401){
+    sessionStorage.removeItem(ADMIN_SESSION_KEY);
+    throw new Error('Clave de edición incorrecta. Vuelve a intentarlo.');
+  }
+
+  if(!res.ok){
+    var msg = 'No se pudo guardar en Vercel.';
+    try {
+      var data = await res.json();
+      if(data && data.error) msg = data.error;
+    } catch(e){}
+    if(res.status === 413) msg += ' La petición superó el límite permitido.';
+    throw new Error(msg);
+  }
+
+  remoteConfigured = true;
+  storageOk = true;
+  remoteHasState = true;
+  return await res.json();
+}
+
+function dashMeta(d){
+  return {id:d.id, title:d.title, topic:d.topic, date:d.date};
+}
+
+async function ensureRemoteInitialized(password){
+  if(remoteHasState) return;
+
+  // Primera escritura de una instalación nueva: guarda el contenido semilla
+  // dashboard por dashboard. Nunca envía todos los HTML en una sola petición.
+  for(var i=0;i<dashIndex.length;i++){
+    var d = dashIndex[i];
+    if(!d.html) continue;
+    await apiWrite({
+      action:'upsert-dashboard',
+      dashboard:dashMeta(d),
+      html:d.html,
+      topics:topics
+    }, password);
+  }
+
+  if(dashIndex.length===0){
+    await apiWrite({action:'save-topics', topics:topics}, password);
+  }
+  remoteHasState = true;
+}
+
+async function saveDashboardRemote(d, html, password){
+  await ensureRemoteInitialized(password);
+  return await apiWrite({
+    action:'upsert-dashboard',
+    dashboard:dashMeta(d),
+    html:html,
+    topics:topics
+  }, password);
+}
+
+async function saveTopicsRemote(password){
+  await ensureRemoteInitialized(password);
+  return await apiWrite({action:'save-topics', topics:topics}, password);
+}
+
+function render(){
+  document.getElementById('updated-date').textContent = new Date().toLocaleDateString('es-CO', {year:'numeric', month:'2-digit', day:'2-digit'});
+  var syncDot = document.getElementById('syncDot');
+  syncDot.className = 'sync-dot' + (storageOk ? ' live' : '');
+  document.getElementById('stat').textContent = storageOk
+    ? (dashIndex.length + ' dashboards · sincronizado')
+    : (dashIndex.length + ' dashboards · contenido base');
+
+  var filters = document.getElementById('filters');
+  filters.innerHTML = '';
+  var allChip = document.createElement('button');
+  allChip.className = 'chip' + (activeFilter==='all'?' active':'');
+  allChip.textContent = 'Todos';
+  allChip.onclick = function(){ activeFilter='all'; render(); };
+  filters.appendChild(allChip);
+  topics.forEach(function(t){
+    var c = dashIndex.filter(function(i){return i.topic===t.id;}).length;
+    var chip = document.createElement('button');
+    chip.className = 'chip' + (activeFilter===t.id?' active':'');
+    chip.textContent = t.name + (c? ' - '+c : '');
+    chip.onclick = function(){ activeFilter=t.id; render(); };
+    filters.appendChild(chip);
+  });
+  var addTopicBtn = document.createElement('button');
+  addTopicBtn.className = 'topic-add-btn';
+  addTopicBtn.textContent = '+ Categoria';
+  addTopicBtn.onclick = openAddTopicModal;
+  filters.appendChild(addTopicBtn);
+  var addBtn = document.createElement('button');
+  addBtn.className = 'add-btn dash';
+  addBtn.textContent = '+ Agregar';
+  addBtn.onclick = openAddModal;
+  filters.appendChild(addBtn);
+
+  var main = document.getElementById('main');
+  main.innerHTML = '';
+  var visible = activeFilter==='all' ? topics : topics.filter(function(t){return t.id===activeFilter;});
+
+  visible.forEach(function(topic){
+    var topicItems = dashIndex.filter(function(i){return i.topic===topic.id;});
+    if(activeFilter==='all' && topicItems.length===0) return;
+
+    var section = document.createElement('section');
+    section.className = 'topic';
+    var head = document.createElement('div');
+    head.className = 'topic-head';
+    head.innerHTML = '<span class="tag" style="background:'+topic.color+'"></span>'+ 
+      '<h2>'+esc(topic.name)+'</h2>'+ 
+      '<span class="count">('+topicItems.length+')</span>';
+    section.appendChild(head);
+
+    var grid = document.createElement('div');
+    grid.className = 'grid';
+    if(topicItems.length===0){
+      grid.innerHTML = '<div class="empty">Sin dashboards todavia en este tema.</div>';
+    } else {
+      topicItems.forEach(function(it){
+        var card = document.createElement('div');
+        card.className = 'card';
+        card.style.setProperty('--c', topic.color);
+        card.innerHTML = '<button class="del" title="Eliminar">✕</button>'+ 
+          '<div class="k">DASHBOARD</div>'+ 
+          '<h3>'+esc(it.title)+'</h3>'+ 
+          '<div class="meta"><span>'+esc(it.date||'')+'</span><span>Abrir</span></div>';
+        card.onclick = function(){ openViewer(it); };
+        card.querySelector('.del').onclick = function(ev){
+          ev.stopPropagation();
+          deleteDashboard(it.id);
+        };
+        grid.appendChild(card);
+      });
+    }
+    section.appendChild(grid);
+    main.appendChild(section);
+  });
+
+  if(dashIndex.length===0){
+    main.innerHTML = '<div class="empty" style="margin-top:20px;">Todavia no hay dashboards cargados. Usa "+ Agregar" para subir el primero.</div>';
+  }
+}
+
+async function deleteDashboard(id){
+  if(!confirm('¿Eliminar este dashboard? Esta accion afecta a todos los que usan este link.')) return;
+  var password = getAdminPassword();
+  if(!password) return;
+
+  try {
+    await ensureRemoteInitialized(password);
+    await apiWrite({action:'delete-dashboard', id:id}, password);
+    dashIndex = dashIndex.filter(function(d){ return d.id !== id; });
+    render();
+  } catch(e){
+    alert(e.message || String(e));
+  }
+}
+
+async function openViewer(it){
+  document.getElementById('v-title').textContent = it.title;
+  var frame = document.getElementById('v-frame');
+  document.getElementById('viewer').classList.remove('hidden');
+
+  if(it.html){
+    frame.srcdoc = it.html;
+    return;
+  }
+
+  frame.srcdoc = '<p style="font-family:sans-serif;padding:20px;color:#888;">Cargando…</p>';
+  try {
+    var res = await fetch('/api/data?dashboard=' + encodeURIComponent(it.id), {cache:'no-store'});
+    if(!res.ok) throw new Error('HTTP ' + res.status);
+    var html = await res.text();
+    frame.srcdoc = html || '<p style="font-family:sans-serif;padding:20px;color:#c00;">Sin contenido.</p>';
+  } catch(e){
+    frame.srcdoc = '<p style="font-family:sans-serif;padding:20px;color:#c00;">No se pudo cargar el contenido.</p>';
+  }
+}
+document.getElementById('close-v').onclick = function(){
+  document.getElementById('viewer').classList.add('hidden');
+  document.getElementById('v-frame').srcdoc = '';
+};
+
+// ------------------------------------------------------------------
+// MODAL: agregar dashboard
+// ------------------------------------------------------------------
+function openAddModal(){
+  var sel = document.getElementById('f-topic');
+  sel.innerHTML = '';
+  topics.forEach(function(t){
+    var opt = document.createElement('option');
+    opt.value = t.id;
+    opt.textContent = t.name;
+    sel.appendChild(opt);
+  });
+  document.getElementById('f-title').value = '';
+  document.getElementById('f-html').value = '';
+  document.getElementById('modalError').classList.add('hidden');
+  document.getElementById('modalBackdrop').classList.remove('hidden');
+}
+document.getElementById('cancelAdd').onclick = function(){
+  document.getElementById('modalBackdrop').classList.add('hidden');
+};
+document.getElementById('confirmAdd').onclick = async function(){
+  var title = document.getElementById('f-title').value.trim();
+  var topic = document.getElementById('f-topic').value;
+  var html = document.getElementById('f-html').value;
+  var errBox = document.getElementById('modalError');
+  errBox.classList.add('hidden');
+
+  if(!title || !html.trim()){
+    errBox.textContent = 'Completa el titulo y pega el HTML del dashboard.';
+    errBox.classList.remove('hidden');
+    return;
+  }
+
+  var password = getAdminPassword();
+  if(!password){
+    errBox.textContent = 'Edición cancelada.';
+    errBox.classList.remove('hidden');
+    return;
+  }
+
+  var btn = document.getElementById('confirmAdd');
+  btn.disabled = true;
+  btn.textContent = 'Guardando...';
+
+  var id = slugify(title);
+  var date = new Date().toISOString().slice(0,10);
+  var item = {id:id, title:title, topic:topic, date:date, html:html};
+
+  try {
+    await saveDashboardRemote(item, html, password);
+    dashIndex.push(item);
+    document.getElementById('modalBackdrop').classList.add('hidden');
+    activeFilter = topic;
+    render();
+  } catch(e){
+    errBox.textContent = e.message || 'No se pudo guardar.';
+    errBox.classList.remove('hidden');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Guardar';
+  }
+};
+
+// ------------------------------------------------------------------
+// MODAL: agregar categoria
+// ------------------------------------------------------------------
+function openAddTopicModal(){
+  document.getElementById('t-name').value = '';
+  document.getElementById('t-color').value = '#4fd8d0';
+  document.getElementById('topicModalError').classList.add('hidden');
+  document.getElementById('topicModalBackdrop').classList.remove('hidden');
+}
+document.getElementById('cancelAddTopic').onclick = function(){
+  document.getElementById('topicModalBackdrop').classList.add('hidden');
+};
+document.getElementById('confirmAddTopic').onclick = async function(){
+  var name = document.getElementById('t-name').value.trim();
+  var color = document.getElementById('t-color').value || '#4fd8d0';
+  var errBox = document.getElementById('topicModalError');
+  errBox.classList.add('hidden');
+
+  if(!name){
+    errBox.textContent = 'Escribe un nombre para la categoria.';
+    errBox.classList.remove('hidden');
+    return;
+  }
+  if(topics.some(function(t){ return t.name.toLowerCase() === name.toLowerCase(); })){
+    errBox.textContent = 'Ya existe una categoria con ese nombre.';
+    errBox.classList.remove('hidden');
+    return;
+  }
+
+  var password = getAdminPassword();
+  if(!password){
+    errBox.textContent = 'Edición cancelada.';
+    errBox.classList.remove('hidden');
+    return;
+  }
+
+  var btn = document.getElementById('confirmAddTopic');
+  btn.disabled = true;
+  btn.textContent = 'Guardando...';
+
+  var id = slugifyTopic(name);
+  var previous = topics.slice();
+
+  try {
+    topics.push({id:id, name:name, color:color});
+    await saveTopicsRemote(password);
+    document.getElementById('topicModalBackdrop').classList.add('hidden');
+    activeFilter = id;
+    render();
+  } catch(e){
+    topics = previous;
+    errBox.textContent = e.message || 'No se pudo guardar.';
+    errBox.classList.remove('hidden');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Guardar';
+  }
+};
+
+// ------------------------------------------------------------------
+(async function init(){
+  await loadSharedState();
+  render();
+})();
+
+
+} catch(err) {
+  document.getElementById('main').innerHTML =
+    '<div style="color:#e0645c;padding:30px 10px;font-size:12px;">Error al iniciar la pagina: ' + String(err && err.message || err) + '</div>';
+}
+
+</script>
+</body>
+</html>
