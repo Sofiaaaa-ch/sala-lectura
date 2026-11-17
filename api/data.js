@@ -1,8 +1,10 @@
-import { get, put, del } from '@vercel/blob';
+import { get, put, del, BlobPreconditionFailedError } from '@vercel/blob';
 
 const LEGACY_PATH = 'sala-lectura/state.json';
 const META_PATH = 'sala-lectura/meta-v2.json';
 const DASH_PREFIX = 'sala-lectura/dashboards/';
+const MAX_HTML_BYTES = 4 * 1024 * 1024;
+const META_RETRIES = 5;
 
 function json(data, status = 200) {
   return Response.json(data, {
@@ -37,29 +39,38 @@ function dashboardPath(id) {
   return `${DASH_PREFIX}${id}.html`;
 }
 
-async function readText(path) {
-  try {
-    const result = await get(path, { access: 'private', useCache: false });
-    if (!result || result.statusCode !== 200 || !result.stream) return null;
-    return await new Response(result.stream).text();
-  } catch (_) {
-    return null;
+// Devuelve { text, etag }. null SOLO si el Blob no existe.
+// Cualquier otro fallo (red, permisos, servicio) se propaga: antes se confundía
+// con "no existe", lo que podía llevar a recrear el índice y perder datos.
+async function readBlob(path) {
+  const result = await get(path, { access: 'private', useCache: false });
+  if (!result) return null;
+  if (result.statusCode !== 200 || !result.stream) {
+    throw new Error(`Lectura inesperada de ${path} (status ${result.statusCode}).`);
   }
+  const text = await new Response(result.stream).text();
+  return { text, etag: result.blob && result.blob.etag };
 }
 
 async function readJson(path) {
-  const text = await readText(path);
-  if (text == null) return null;
-  try { return JSON.parse(text); } catch (_) { return null; }
+  const r = await readBlob(path);
+  if (!r) return null;
+  try {
+    return { value: JSON.parse(r.text), etag: r.etag };
+  } catch (e) {
+    throw new Error(`${path} no es JSON válido: ${e.message}`);
+  }
 }
 
-async function writeJson(path, value) {
-  await put(path, JSON.stringify(value), {
+async function writeJson(path, value, etag) {
+  const options = {
     access: 'private',
     allowOverwrite: true,
     contentType: 'application/json; charset=utf-8',
     cacheControlMaxAge: 60,
-  });
+  };
+  if (etag) options.ifMatch = etag;
+  await put(path, JSON.stringify(value), options);
 }
 
 function metadataOnly(d) {
@@ -71,23 +82,22 @@ function metadataOnly(d) {
   };
 }
 
-async function migrateLegacyState() {
-  // Si ya existe el formato v2, no tocamos nada.
-  let meta = await readJson(META_PATH);
-  if (meta && Array.isArray(meta.topics) && Array.isArray(meta.dashboards)) return meta;
+function validMeta(m) {
+  return m && Array.isArray(m.topics) && Array.isArray(m.dashboards);
+}
 
+async function migrateLegacyState() {
   // Compatibilidad con la versión anterior: un único state.json que contenía
   // TODOS los HTML. Se migra una sola vez a un Blob por dashboard.
-  const legacy = await readJson(LEGACY_PATH);
-  if (!legacy || !Array.isArray(legacy.topics) || !Array.isArray(legacy.dashboards)) {
-    return null;
-  }
+  const legacyRead = await readJson(LEGACY_PATH);
+  const legacy = legacyRead && legacyRead.value;
+  if (!validMeta(legacy)) return null;
 
   const dashboards = [];
   const writes = [];
 
   for (const d of legacy.dashboards) {
-    const id = safeId(d.id);
+    const id = safeId(d && d.id);
     if (!id) continue;
     const html = typeof d.html === 'string' ? d.html : '';
     if (html) {
@@ -103,25 +113,63 @@ async function migrateLegacyState() {
     dashboards.push(metadataOnly(d));
   }
 
-  // Son varios objetos pequeños/medianos, no una petición gigante desde el navegador.
   await Promise.all(writes);
 
-  meta = {
+  const meta = {
     version: 2,
     topics: legacy.topics,
     dashboards,
     migratedAt: new Date().toISOString(),
   };
-  await writeJson(META_PATH, meta);
 
+  // Sin ifMatch no se puede exigir "crear solo si no existe"; releemos justo
+  // antes para no pisar un meta creado por otra petición concurrente.
+  const existing = await readJson(META_PATH);
+  if (existing && validMeta(existing.value)) return { meta: existing.value, etag: existing.etag };
+
+  await writeJson(META_PATH, meta);
   // LEGACY_PATH se conserva como copia de seguridad; no se elimina automáticamente.
-  return meta;
+  const fresh = await readJson(META_PATH);
+  return { meta: fresh ? fresh.value : meta, etag: fresh && fresh.etag };
 }
 
-async function loadMeta() {
-  const meta = await readJson(META_PATH);
-  if (meta && Array.isArray(meta.topics) && Array.isArray(meta.dashboards)) return meta;
+// Devuelve { meta, etag } o null si aún no existe ningún estado (instalación nueva).
+async function loadMetaWithEtag() {
+  const r = await readJson(META_PATH);
+  if (r) {
+    if (!validMeta(r.value)) throw new Error(`${META_PATH} existe pero tiene un formato inesperado.`);
+    return { meta: r.value, etag: r.etag };
+  }
   return await migrateLegacyState();
+}
+
+// Lee-modifica-escribe el índice con control de concurrencia optimista:
+// si otra petición cambió el índice entretanto, se vuelve a leer y reaplicar.
+async function updateMeta(mutator) {
+  for (let attempt = 0; attempt < META_RETRIES; attempt++) {
+    const loaded = await loadMetaWithEtag();
+    const meta = loaded ? loaded.meta : { version: 2, topics: [], dashboards: [] };
+    const etag = loaded ? loaded.etag : undefined;
+
+    const result = mutator(meta, !loaded);
+    meta.version = 2;
+    meta.updatedAt = new Date().toISOString();
+
+    try {
+      await writeJson(META_PATH, meta, etag);
+      return meta;
+    } catch (e) {
+      if (e instanceof BlobPreconditionFailedError && attempt < META_RETRIES - 1) continue;
+      throw e;
+    }
+  }
+  throw new Error('No se pudo actualizar el índice por conflictos de escritura simultánea.');
+}
+
+function describeError(error) {
+  const name = (error && error.name) || 'Error';
+  const message = (error && error.message) || String(error);
+  return { name, message };
 }
 
 export async function GET(request) {
@@ -136,55 +184,68 @@ export async function GET(request) {
     const id = safeId(requestedId);
     if (!id) return new Response('Dashboard inválido.', { status: 400 });
 
-    // Asegura la migración antes de intentar leer el HTML individual.
-    await loadMeta();
-    let html = await readText(dashboardPath(id));
+    try {
+      // Asegura la migración antes de intentar leer el HTML individual.
+      await loadMetaWithEtag();
+      const blob = await readBlob(dashboardPath(id));
+      let html = blob ? blob.text : null;
 
-    // Fallback de seguridad por si la migración se interrumpió a mitad.
-    if (html == null) {
-      const legacy = await readJson(LEGACY_PATH);
-      const found = legacy && Array.isArray(legacy.dashboards)
-        ? legacy.dashboards.find((d) => d && d.id === id)
-        : null;
-      html = found && typeof found.html === 'string' ? found.html : null;
+      // Fallback de seguridad por si la migración se interrumpió a mitad.
+      if (html == null) {
+        const legacyRead = await readJson(LEGACY_PATH);
+        const legacy = legacyRead && legacyRead.value;
+        const found = legacy && Array.isArray(legacy.dashboards)
+          ? legacy.dashboards.find((d) => d && d.id === id)
+          : null;
+        html = found && typeof found.html === 'string' ? found.html : null;
+      }
+
+      if (html == null) return new Response('Dashboard no encontrado.', { status: 404 });
+      return new Response(html, {
+        status: 200,
+        headers: {
+          'Content-Type': 'text/html; charset=utf-8',
+          'Cache-Control': 'no-store',
+          'X-Content-Type-Options': 'nosniff',
+        },
+      });
+    } catch (error) {
+      console.error('GET /api/data?dashboard=', id, error);
+      return new Response('No se pudo leer el dashboard.', { status: 500 });
     }
-
-    if (html == null) return new Response('Dashboard no encontrado.', { status: 404 });
-    return new Response(html, {
-      status: 200,
-      headers: {
-        'Content-Type': 'text/html; charset=utf-8',
-        'Cache-Control': 'no-store',
-        'X-Content-Type-Options': 'nosniff',
-      },
-    });
   }
 
   try {
-    const meta = await loadMeta();
-    return json({ configured: true, state: meta });
+    const loaded = await loadMetaWithEtag();
+    return json({ configured: true, state: loaded ? loaded.meta : null });
   } catch (error) {
     console.error('GET /api/data:', error);
-    return json({ configured: true, state: null, error: 'No se pudo leer el almacenamiento.' }, 500);
+    return json({
+      configured: true,
+      state: null,
+      readError: true,
+      error: 'No se pudo leer el almacenamiento.',
+      detail: describeError(error),
+    }, 500);
   }
 }
 
 export async function PUT(request) {
   if (!blobConfigured()) {
-    return json({ error: 'Vercel Blob todavía no está conectado al proyecto.' }, 503);
+    return json({ error: 'Vercel Blob todavía no está conectado al proyecto.', code: 'blob_not_configured' }, 503);
   }
   if (!process.env.ADMIN_PASSWORD) {
-    return json({ error: 'Falta configurar ADMIN_PASSWORD en Vercel.' }, 503);
+    return json({ error: 'Falta configurar ADMIN_PASSWORD en Vercel.', code: 'missing_admin_password' }, 503);
   }
   if (!isAuthorized(request)) {
-    return json({ error: 'Clave de edición incorrecta.' }, 401);
+    return json({ error: 'Clave de edición incorrecta.', code: 'unauthorized' }, 401);
   }
 
   let payload;
   try {
     payload = await request.json();
   } catch (_) {
-    return json({ error: 'JSON inválido.' }, 400);
+    return json({ error: 'JSON inválido.', code: 'bad_json' }, 400);
   }
 
   const action = payload && payload.action;
@@ -196,24 +257,15 @@ export async function PUT(request) {
       const html = payload.html;
 
       if (!id || typeof html !== 'string' || !html.trim()) {
-        return json({ error: 'Dashboard o HTML inválido.' }, 400);
+        return json({ error: 'Dashboard o HTML inválido.', code: 'bad_dashboard' }, 400);
       }
 
       // Dejamos margen frente al límite de 4.5 MB de Vercel Functions.
-      if (Buffer.byteLength(html, 'utf8') > 4 * 1024 * 1024) {
-        return json({ error: 'Este dashboard individual supera 4 MB. Debe subirse con carga directa a Blob.' }, 413);
+      if (Buffer.byteLength(html, 'utf8') > MAX_HTML_BYTES) {
+        return json({ error: 'Este dashboard individual supera 4 MB. Debe subirse con carga directa a Blob.', code: 'too_large' }, 413);
       }
 
-      let meta = await loadMeta();
-      if (!meta) {
-        meta = {
-          version: 2,
-          topics: Array.isArray(payload.topics) ? payload.topics : [],
-          dashboards: [],
-        };
-      }
-      if (Array.isArray(payload.topics)) meta.topics = payload.topics;
-
+      // 1) El HTML va a su propio Blob (nunca se toca el de otros dashboards).
       await put(dashboardPath(id), html, {
         access: 'private',
         allowOverwrite: true,
@@ -221,45 +273,50 @@ export async function PUT(request) {
         cacheControlMaxAge: 60,
       });
 
+      // 2) Se actualiza solo la entrada de este dashboard en el índice.
+      //    Las categorías del servidor NO se sobrescriben con las del cliente,
+      //    salvo en una instalación nueva donde todavía no existe índice.
       const item = metadataOnly(d);
-      const pos = meta.dashboards.findIndex((x) => x && x.id === id);
-      if (pos >= 0) meta.dashboards[pos] = item;
-      else meta.dashboards.push(item);
-
-      meta.version = 2;
-      meta.updatedAt = new Date().toISOString();
-      await writeJson(META_PATH, meta);
+      const meta = await updateMeta((m, isNew) => {
+        if (isNew && Array.isArray(payload.topics)) m.topics = payload.topics;
+        const pos = m.dashboards.findIndex((x) => x && x.id === id);
+        if (pos >= 0) m.dashboards[pos] = item;
+        else m.dashboards.push(item);
+      });
       return json({ ok: true, state: meta });
     }
 
     if (action === 'save-topics') {
       if (!Array.isArray(payload.topics) || payload.topics.length > 200) {
-        return json({ error: 'Formato de categorías inválido.' }, 400);
+        return json({ error: 'Formato de categorías inválido.', code: 'bad_topics' }, 400);
       }
-      let meta = await loadMeta();
-      if (!meta) meta = { version: 2, topics: [], dashboards: [] };
-      meta.topics = payload.topics;
-      meta.updatedAt = new Date().toISOString();
-      await writeJson(META_PATH, meta);
+      const meta = await updateMeta((m) => { m.topics = payload.topics; });
       return json({ ok: true, state: meta });
     }
 
     if (action === 'delete-dashboard') {
       const id = safeId(payload.id);
-      if (!id) return json({ error: 'Dashboard inválido.' }, 400);
-      let meta = await loadMeta();
-      if (!meta) return json({ ok: true, state: null });
+      if (!id) return json({ error: 'Dashboard inválido.', code: 'bad_dashboard' }, 400);
 
-      meta.dashboards = meta.dashboards.filter((d) => d && d.id !== id);
-      meta.updatedAt = new Date().toISOString();
-      await writeJson(META_PATH, meta);
-      await del(dashboardPath(id));
+      const loaded = await loadMetaWithEtag();
+      if (!loaded) return json({ ok: true, state: null });
+
+      const meta = await updateMeta((m) => {
+        m.dashboards = m.dashboards.filter((x) => x && x.id !== id);
+      });
+      // Si el borrado del Blob falla, el índice ya no lo muestra; no es un error para el usuario.
+      try { await del(dashboardPath(id)); }
+      catch (e) { console.error('del', dashboardPath(id), e); }
       return json({ ok: true, state: meta });
     }
 
-    return json({ error: 'Acción no soportada.' }, 400);
+    return json({ error: 'Acción no soportada.', code: 'bad_action' }, 400);
   } catch (error) {
-    console.error('PUT /api/data:', error);
-    return json({ error: 'No se pudo guardar en Vercel Blob.' }, 500);
+    console.error('PUT /api/data', action, error);
+    return json({
+      error: 'No se pudo guardar en Vercel Blob.',
+      code: 'blob_error',
+      detail: describeError(error),
+    }, 500);
   }
 }

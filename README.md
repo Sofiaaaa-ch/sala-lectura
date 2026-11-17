@@ -1,35 +1,41 @@
-# Sala de Lectura — Vercel (FIX 413)
+# Sala de Lectura
 
-Esta versión corrige el error **413 FUNCTION_PAYLOAD_TOO_LARGE**.
+Biblioteca de dashboards HTML autocontenidos, desplegada en Vercel.
 
-## Qué cambió
+**Flujo de despliegue:** GitHub (`main`) → Vercel Production. Cada push a `main` genera el deployment.
 
-La versión anterior guardaba `topics + dashboards + TODOS los HTML` en un único `state.json` y reenviaba todo el estado en cada edición. Al crecer la sala, el `PUT /api/data` superó el límite de payload de Vercel Functions.
+## Almacenamiento (Vercel Blob privado)
 
-La versión 2 guarda:
+- `sala-lectura/meta-v2.json`: solo categorías y metadatos pequeños (`id`, `title`, `topic`, `date`).
+- `sala-lectura/dashboards/<id>.html`: un Blob por dashboard, con el HTML intacto.
+- `sala-lectura/state.json`: formato antiguo monolítico; se conserva solo como respaldo y nunca se borra.
 
-- `sala-lectura/meta-v2.json`: solo categorías y metadatos pequeños.
-- `sala-lectura/dashboards/<id>.html`: un Blob privado por dashboard.
-- `sala-lectura/state.json`: se conserva únicamente como respaldo de la versión antigua.
+Guardar un dashboard envía únicamente ese HTML. Nunca se reenvían los demás (evita el 413 `FUNCTION_PAYLOAD_TOO_LARGE`).
 
-## Migración automática
+## API `/api/data`
 
-En el primer acceso después del despliegue, `/api/data` detecta el `state.json` antiguo y migra automáticamente cada dashboard a su propio Blob. El archivo antiguo NO se borra.
+- `GET` → índice (categorías + metadatos).
+- `GET ?dashboard=<id>` → HTML del dashboard.
+- `PUT` (`Authorization: Bearer <ADMIN_PASSWORD>`) → acciones `upsert-dashboard`, `save-topics`, `delete-dashboard`.
 
-## Despliegue
+### Protecciones de datos
+- Si falla la lectura del Blob (red, permisos, servicio) se devuelve error; **no** se interpreta como "no existe", así que nunca se recrea el índice vacío o desde el respaldo antiguo.
+- El índice se actualiza con escritura condicional (ETag / `ifMatch`) y reintentos: dos personas guardando a la vez no se pisan.
+- `upsert-dashboard` no sobrescribe las categorías del servidor con las del navegador.
+- El frontend no escribe nada si no pudo leer el estado compartido.
+- Migración automática del `state.json` antiguo al primer acceso, sin borrar el original.
 
-Conserva en Vercel las variables actuales:
+### Errores
+Las respuestas de error incluyen `code` y, en fallos de Blob, `detail`. El navegador registra en consola el status HTTP y la respuesta real, y muestra un mensaje amigable.
 
+## Límites
+- 4 MB por dashboard (límite de Vercel Functions: 4,5 MB por petición). Más allá se necesitaría carga directa a Blob.
+
+## Variables de entorno en Vercel
 - `ADMIN_PASSWORD`
-- `BLOB_READ_WRITE_TOKEN` (si tu store usa token clásico)
-
-Reemplaza el proyecto por estos archivos y vuelve a desplegar. No necesitas borrar el Blob ni los dashboards actuales.
+- `BLOB_READ_WRITE_TOKEN` (o OIDC, según el store)
 
 ## Estructura
-
-- `index.html`
-- `api/data.js`
-- `package.json`
-- `.gitignore`
-
-`@vercel/blob` se actualizó a `^2.6.1`.
+- `index.html`: interfaz y lógica del frontend.
+- `api/data.js`: API.
+- `package.json`: depende de `@vercel/blob`.

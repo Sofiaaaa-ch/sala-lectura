@@ -101,7 +101,8 @@
 </header>
 <main id="main"><div class="loading">Cargando dashboards…</div></main>
 <div class="footer-note">
-  Ultima actualizacion: <span id="updated-date">—</span>. Los dashboards se publican desde almacenamiento compartido en Vercel: cualquiera con este link ve las actualizaciones sin necesidad de un link nuevo.
+  Versión <span id="app-version">—</span> · Última actualización: <span id="updated-date">—</span><br>
+  Diseño de la página: Sofía Chacón Parra · Alimentación y publicación de dashboards: Paula Andrea Bernal
 </div>
 
 <div class="viewer hidden" id="viewer">
@@ -3630,12 +3631,18 @@ footer{
 `}
 ];
 
+// Actualizar estos dos valores en cada publicación de la página.
+var APP_VERSION = 'v0.005';
+var APP_UPDATED = '17/11/2026';
+
 var activeFilter = 'all';
 var dashIndex = []; // [{id, title, topic, date}] (html solo temporalmente para contenido semilla/nuevo)
 var topics = []; // [{id, name, color}]
 var storageOk = false;
 var remoteConfigured = false;
 var remoteHasState = false;
+var remoteReadFailed = false; // true si no se pudo LEER el estado remoto (no es lo mismo que "vacío")
+var MAX_REQUEST_BYTES = 4.4 * 1024 * 1024; // límite de Vercel Functions: 4.5 MB
 var ADMIN_SESSION_KEY = 'sala-lectura-admin-password';
 
 function esc(s){ var d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
@@ -3680,8 +3687,15 @@ async function loadSharedState(){
   cloneDefaults();
   try {
     var res = await fetch('/api/data', {cache:'no-store'});
-    if(!res.ok) throw new Error('HTTP ' + res.status);
+    if(!res.ok){
+      var bodyText = '';
+      try { bodyText = await res.text(); } catch(_){}
+      console.error('[Sala de Lectura] GET /api/data falló. HTTP ' + res.status, bodyText);
+      remoteReadFailed = true;
+      throw new Error('HTTP ' + res.status);
+    }
     var payload = await res.json();
+    remoteReadFailed = false;
     remoteConfigured = !!payload.configured;
     if(payload.state && Array.isArray(payload.state.topics) && Array.isArray(payload.state.dashboards)){
       topics = payload.state.topics;
@@ -3693,6 +3707,8 @@ async function loadSharedState(){
       storageOk = remoteConfigured;
     }
   } catch(e){
+    console.error('[Sala de Lectura] No se pudo cargar el estado compartido:', e);
+    remoteReadFailed = true;
     remoteConfigured = false;
     remoteHasState = false;
     storageOk = false;
@@ -3709,28 +3725,52 @@ function getAdminPassword(){
 }
 
 async function apiWrite(payload, password){
-  var res = await fetch('/api/data', {
-    method:'PUT',
-    headers:{
-      'Content-Type':'application/json',
-      'Authorization':'Bearer ' + password
-    },
-    body: JSON.stringify(payload)
-  });
+  var body = JSON.stringify(payload);
+  var bytes = new Blob([body]).size;
+  if(bytes > MAX_REQUEST_BYTES){
+    console.error('[Sala de Lectura] Petición demasiado grande: ' + bytes + ' bytes (límite ~' + MAX_REQUEST_BYTES + ').');
+    throw new Error('Este dashboard es demasiado grande para guardarse (' + (bytes/1048576).toFixed(1) + ' MB; máximo ~4,4 MB). Detalle técnico en consola.');
+  }
 
-  if(res.status === 401){
-    sessionStorage.removeItem(ADMIN_SESSION_KEY);
-    throw new Error('Clave de edición incorrecta. Vuelve a intentarlo.');
+  var res;
+  try {
+    res = await fetch('/api/data', {
+      method:'PUT',
+      headers:{
+        'Content-Type':'application/json',
+        'Authorization':'Bearer ' + password
+      },
+      body: body
+    });
+  } catch(netErr){
+    console.error('[Sala de Lectura] Error de red al guardar (' + (payload && payload.action) + '):', netErr);
+    throw new Error('No se pudo conectar con el servidor. Revisa tu conexión. Detalle técnico en consola.');
   }
 
   if(!res.ok){
-    var msg = 'No se pudo guardar en Vercel.';
-    try {
-      var data = await res.json();
-      if(data && data.error) msg = data.error;
-    } catch(e){}
-    if(res.status === 413) msg += ' La petición superó el límite permitido.';
-    throw new Error(msg);
+    var raw = '';
+    var data = null;
+    try { raw = await res.text(); data = JSON.parse(raw); } catch(e){}
+    console.error('[Sala de Lectura] PUT /api/data falló. Acción: ' + (payload && payload.action) +
+      ' · HTTP ' + res.status + ' · respuesta:', data || raw);
+
+    if(res.status === 401){
+      sessionStorage.removeItem(ADMIN_SESSION_KEY);
+      throw new Error('Clave de edición incorrecta. Vuelve a intentarlo.');
+    }
+    var msg;
+    if(res.status === 413){
+      msg = 'El contenido superó el límite permitido por el servidor (413).';
+    } else if(res.status === 503 && data && data.error){
+      msg = data.error; // configuración del servidor (Blob / ADMIN_PASSWORD)
+    } else if(res.status >= 500){
+      msg = 'Error del servidor o de Vercel Blob (HTTP ' + res.status + ').';
+    } else if(data && data.error){
+      msg = data.error;
+    } else {
+      msg = 'No se pudo guardar (HTTP ' + res.status + ').';
+    }
+    throw new Error(msg + ' Detalle técnico en consola.');
   }
 
   remoteConfigured = true;
@@ -3745,6 +3785,12 @@ function dashMeta(d){
 
 async function ensureRemoteInitialized(password){
   if(remoteHasState) return;
+
+  // Si no se pudo LEER el almacenamiento, no sabemos si hay datos: no se escribe
+  // nada (evita subir contenido semilla encima de datos reales).
+  if(remoteReadFailed){
+    throw new Error('No se pudo leer el almacenamiento compartido, así que no se guardó nada para proteger los dashboards existentes. Recarga la página e inténtalo de nuevo. Detalle técnico en consola.');
+  }
 
   // Primera escritura de una instalación nueva: guarda el contenido semilla
   // dashboard por dashboard. Nunca envía todos los HTML en una sola petición.
@@ -3781,7 +3827,8 @@ async function saveTopicsRemote(password){
 }
 
 function render(){
-  document.getElementById('updated-date').textContent = new Date().toLocaleDateString('es-CO', {year:'numeric', month:'2-digit', day:'2-digit'});
+  document.getElementById('app-version').textContent = APP_VERSION;
+  document.getElementById('updated-date').textContent = APP_UPDATED;
   var syncDot = document.getElementById('syncDot');
   syncDot.className = 'sync-dot' + (storageOk ? ' live' : '');
   document.getElementById('stat').textContent = storageOk
@@ -3872,7 +3919,8 @@ async function deleteDashboard(id){
     dashIndex = dashIndex.filter(function(d){ return d.id !== id; });
     render();
   } catch(e){
-    alert(e.message || String(e));
+    console.error('[Sala de Lectura] Error al eliminar dashboard:', e);
+    alert('No se pudo eliminar. ' + (e.message || String(e)));
   }
 }
 
@@ -3889,10 +3937,16 @@ async function openViewer(it){
   frame.srcdoc = '<p style="font-family:sans-serif;padding:20px;color:#888;">Cargando…</p>';
   try {
     var res = await fetch('/api/data?dashboard=' + encodeURIComponent(it.id), {cache:'no-store'});
-    if(!res.ok) throw new Error('HTTP ' + res.status);
+    if(!res.ok){
+      var errText = '';
+      try { errText = await res.text(); } catch(_){}
+      console.error('[Sala de Lectura] GET dashboard ' + it.id + ' falló. HTTP ' + res.status, errText);
+      throw new Error('HTTP ' + res.status);
+    }
     var html = await res.text();
     frame.srcdoc = html || '<p style="font-family:sans-serif;padding:20px;color:#c00;">Sin contenido.</p>';
   } catch(e){
+    console.error('[Sala de Lectura] No se pudo cargar el dashboard ' + it.id + ':', e);
     frame.srcdoc = '<p style="font-family:sans-serif;padding:20px;color:#c00;">No se pudo cargar el contenido.</p>';
   }
 }
@@ -3952,11 +4006,14 @@ document.getElementById('confirmAdd').onclick = async function(){
   try {
     await saveDashboardRemote(item, html, password);
     dashIndex.push(item);
-    document.getElementById('modalBackdrop').classList.add('hidden');
     activeFilter = topic;
     render();
+    btn.textContent = 'Guardado correctamente';
+    await new Promise(function(r){ setTimeout(r, 700); });
+    document.getElementById('modalBackdrop').classList.add('hidden');
   } catch(e){
-    errBox.textContent = e.message || 'No se pudo guardar.';
+    console.error('[Sala de Lectura] Error al guardar dashboard:', e);
+    errBox.textContent = e.message || 'No se pudo guardar. Detalle técnico en consola.';
     errBox.classList.remove('hidden');
   } finally {
     btn.disabled = false;
@@ -4010,12 +4067,15 @@ document.getElementById('confirmAddTopic').onclick = async function(){
   try {
     topics.push({id:id, name:name, color:color});
     await saveTopicsRemote(password);
-    document.getElementById('topicModalBackdrop').classList.add('hidden');
     activeFilter = id;
     render();
+    btn.textContent = 'Guardado correctamente';
+    await new Promise(function(r){ setTimeout(r, 700); });
+    document.getElementById('topicModalBackdrop').classList.add('hidden');
   } catch(e){
+    console.error('[Sala de Lectura] Error al guardar categoría:', e);
     topics = previous;
-    errBox.textContent = e.message || 'No se pudo guardar.';
+    errBox.textContent = e.message || 'No se pudo guardar. Detalle técnico en consola.';
     errBox.classList.remove('hidden');
   } finally {
     btn.disabled = false;
